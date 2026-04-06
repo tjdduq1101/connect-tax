@@ -67,7 +67,7 @@ export const CATEGORY_RULES: { keywords: string[]; label: string; emoji: string;
   { keywords: ['이커머스', '전자상거래', '온라인쇼핑', '쿠팡', '11번가', 'G마켓', '옥션', '위메프', '티몬', 'coupang', 'SSG', '마켓컬리', '컬리', '오아시스'], label: '이커머스', emoji: '🛍️', desc: '이커머스/온라인유통업입니다', color: '#E65100', bg: '#FFF3E0' },
 
   // G: 도매 및 소매업
-  { keywords: ['편의점', 'GS25', 'CU', '세븐일레븐', '이마트24', '미니스톱'], label: '편의점', emoji: '🏪', desc: '편의점입니다', color: '#2196F3', bg: '#E3F2FD' },
+  { keywords: ['편의점', 'GS25', 'CU', '씨유', '세븐일레븐', '이마트24', '미니스톱'], label: '편의점', emoji: '🏪', desc: '편의점입니다', color: '#2196F3', bg: '#E3F2FD' },
   { keywords: ['마트', '이마트', '홈플러스', '롯데마트', '슈퍼', '하나로', '농협마트'], label: '마트', emoji: '🛒', desc: '마트/슈퍼입니다', color: '#4CAF50', bg: '#E8F5E9' },
   { keywords: ['주유', 'LPG', '가스충전', '충전소'], label: '주유소', emoji: '⛽', desc: '주유소입니다', color: '#FF9800', bg: '#FFF3E0' },
   { keywords: ['도매', '도매업', '무역', '수출', '수입', '상사', '트레이딩'], label: '도매/무역', emoji: '📦', desc: '도매/무역업입니다', color: '#0277BD', bg: '#E1F5FE' },
@@ -159,7 +159,7 @@ export const PDF_ACCOUNT_RULES: { keywords: string[]; code: string; name: string
   { keywords: ['약국', '올리브영'], code: '830', name: '소모품비', tag: '일반' },
 
   // 9. 편의점 (1만원 기준 분기)
-  { keywords: ['편의점', 'GS25', 'CU', '세븐일레븐', '이마트24', '미니스톱'], code: '830', name: '소모품비', tag: '매입', note: '1만원 미만: 812 여비교통비 / 환급시 불공제' },
+  { keywords: ['편의점', 'GS25', 'CU', '씨유', '세븐일레븐', '이마트24', '미니스톱'], code: '830', name: '소모품비', tag: '매입', note: '1만원 미만: 812 여비교통비 / 환급시 불공제' },
 
   // 10. 교통 결제 (로카모빌리티, 티머니 등)
   { keywords: ['로카모빌리티', '마이비', '비씨카드', '카카오페이', '티머니', '스마트로'], code: '812', name: '여비교통비', tag: '일반' },
@@ -423,9 +423,10 @@ function applyConditions(
   }
 
   // 편의점: 금액 기준 분기
-  if (['편의점', 'GS25', 'CU', '세븐일레븐', '이마트24', '미니스톱'].some(kw => text.includes(kw))) {
+  if (['편의점', 'GS25', 'CU', '씨유', '세븐일레븐', '이마트24', '미니스톱'].some(kw => text.includes(kw))) {
     if (row.amount < 10000) {
-      return { code: '812', name: '여비교통비', tag: '매입' };
+      const tag = row.ntsStatus === '불공제' ? '일반' : '매입';
+      return { code: '812', name: '여비교통비', tag };
     }
     if (conditions.isRefund) {
       return { code: '830', name: '소모품비', tag: '일반', note: '환급: 불공제' };
