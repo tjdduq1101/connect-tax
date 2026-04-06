@@ -425,7 +425,7 @@ function applyConditions(
   // 편의점: 금액 기준 분기
   if (['편의점', 'GS25', 'CU', '씨유', '세븐일레븐', '이마트24', '미니스톱'].some(kw => text.includes(kw))) {
     if (row.amount < 10000) {
-      return { code: '812', name: '여비교통비', tag: '일반' };
+      return { code: '812', name: '여비교통비', tag: '매입' };
     }
     if (conditions.isRefund) {
       return { code: '830', name: '소모품비', tag: '일반', note: '환급: 불공제' };
