@@ -37,10 +37,17 @@ interface NaverResult {
   title: string;
 }
 
+// 업종 조회 결과 (DB or 네이버)
+interface BusinessInfo {
+  sector: string;   // 업태
+  type: string;     // 종목
+  source: "db" | "naver" | "";
+}
+
 interface ClassifiedCashRow {
   input: CashReceiptRow;
   result: ClassificationResult;
-  naverCategory: string;
+  bizInfo: BusinessInfo;
   original차변: string;
   changed: boolean;
 }
@@ -107,86 +114,72 @@ function parseCashReceiptExcel(buffer: ArrayBuffer): CashReceiptRow[] {
 }
 
 // ============================================================
-// 거래처명 정규화 (비교용)
+// 거래처명 정규화 (BusinessLookup과 동일)
 // ============================================================
-const CORP_SUFFIXES = /주식회사|（주）|\(주\)|㈜|유한회사|합자회사|합명회사/g;
-
 function normalizeName(name: string): string {
-  return name
-    .replace(CORP_SUFFIXES, "")
-    .replace(/[^가-힣a-zA-Z0-9]/g, "")
-    .trim()
-    .toLowerCase();
+  return name.replace(/(주식회사|유한회사|유한책임회사|（주）|\(주\)|㈜|\(|\)|\s)/g, "").toLowerCase();
 }
 
-// 네이버 결과가 검색한 거래처와 실제로 같은 업체인지 판별
-function isNameMatch(searchName: string, resultTitle: string): boolean {
-  const normSearch = normalizeName(searchName);
-  const normResult = normalizeName(resultTitle);
+function isNameMatch(title: string, query: string): boolean {
+  const t = normalizeName(title);
+  const q = normalizeName(query);
+  return t === q || t.startsWith(q) || q.startsWith(t);
+}
 
-  if (!normSearch || !normResult) return false;
-
-  // 정규화된 이름이 서로 포함관계이면 OK
-  if (normResult.includes(normSearch) || normSearch.includes(normResult)) return true;
-
-  // 검색명의 핵심 단어가 결과 제목의 시작 부분에 있는지 확인
-  // (예: "쿠팡 제1물류점 CU" → 끝이 "CU"이므로 "쿠팡"과 무관)
-  const searchCore = normSearch.replace(/페이|코리아|글로벌|인터내셔날|산업|식품|공장/g, "").trim();
-  if (searchCore.length >= 2 && normResult.startsWith(searchCore)) return true;
-
-  return false;
+function cleanCorpName(name: string): string {
+  return name.replace(/(주식회사|유한회사|유한책임회사|（주）|\(주\)|㈜|\(|\))/g, "").trim();
 }
 
 // ============================================================
-// DB 조회 (사업자번호 없이 거래처명으로 — 향후 확장 가능)
+// DB 조회 — 사업자번호(10자리) 또는 거래처명으로 검색
 // ============================================================
-interface DbBusiness {
-  b_no: string;
-  b_nm: string;
-  b_sector?: string;
-  b_type?: string;
-}
-
-async function searchDb(tradeName: string): Promise<DbBusiness | null> {
+async function searchDbByBno(bno: string): Promise<BusinessInfo | null> {
+  if (!bno || bno.replace(/[^0-9]/g, "").length !== 10) return null;
   try {
-    // DB에는 b_no 기반 검색밖에 없으므로, 거래처 Code가 있으면 활용
-    // 현금영수증엔 사업자번호가 없으므로 null 반환 (DB API 확장 시 여기를 수정)
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-// DB에 사업자번호로 조회
-async function searchDbByBno(bno: string): Promise<DbBusiness | null> {
-  if (!bno) return null;
-  try {
-    const res = await fetch(`/api/db/search?bno=${encodeURIComponent(bno)}`);
+    const cleaned = bno.replace(/[^0-9]/g, "");
+    const res = await fetch(`/api/db/search?bno=${encodeURIComponent(cleaned)}`);
     if (!res.ok) return null;
     const json = await res.json();
-    return json.data || null;
+    const d = json.data;
+    if (!d) return null;
+    if (!d.b_sector && !d.b_type) return null;
+    return { sector: d.b_sector || "", type: d.b_type || "", source: "db" };
+  } catch {
+    return null;
+  }
+}
+
+async function searchDbByName(tradeName: string): Promise<BusinessInfo | null> {
+  try {
+    const res = await fetch(`/api/db/search?name=${encodeURIComponent(tradeName)}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const d = json.data;
+    if (!d) return null;
+    if (!d.b_sector && !d.b_type) return null;
+    return { sector: d.b_sector || "", type: d.b_type || "", source: "db" };
   } catch {
     return null;
   }
 }
 
 // ============================================================
-// 네이버 검색 — 상위 3개 비교 후 매칭
+// 네이버 검색 — 법인접미사 제거 후 검색, 상위 3개 매칭 검증
 // ============================================================
-async function searchNaverCategory(tradeName: string): Promise<NaverResult | null> {
+async function searchNaverBizInfo(tradeName: string): Promise<BusinessInfo | null> {
   try {
-    const res = await fetch(`/api/naver/search?q=${encodeURIComponent(tradeName)}`);
+    const cleaned = cleanCorpName(tradeName);
+    if (!cleaned) return null;
+    const res = await fetch(`/api/naver/search?q=${encodeURIComponent(cleaned)}`);
     if (!res.ok) return null;
     const data = await res.json();
-    const items = (data.items || []).slice(0, 3); // 상위 3개만
+    const items = (data.items || []).slice(0, 3);
 
-    // 상위 3개 중 거래처명과 실제 매칭되는 첫 번째 결과 사용
     for (const item of items) {
-      if (isNameMatch(tradeName, item.title)) {
-        return { category: item.category, title: item.title };
+      if (isNameMatch(item.title, cleaned)) {
+        return { sector: item.category || "", type: "", source: "naver" };
       }
     }
-
     return null;
   } catch {
     return null;
@@ -194,18 +187,37 @@ async function searchNaverCategory(tradeName: string): Promise<NaverResult | nul
 }
 
 // ============================================================
-// 분류 (품명 무시, DB/네이버 카테고리 활용)
+// 거래처 업종 조회: DB 우선 → 네이버 폴백
+// ============================================================
+async function lookupBusinessInfo(tradeName: string, code: string): Promise<BusinessInfo> {
+  // 1. Code가 사업자번호(10자리)이면 DB 조회
+  const dbByBno = await searchDbByBno(code);
+  if (dbByBno) return dbByBno;
+
+  // 2. 거래처명으로 DB 검색
+  const dbByName = await searchDbByName(tradeName);
+  if (dbByName) return dbByName;
+
+  // 3. 네이버 검색 폴백
+  const naver = await searchNaverBizInfo(tradeName);
+  if (naver) return naver;
+
+  return { sector: "", type: "", source: "" };
+}
+
+// ============================================================
+// 분류 (DB/네이버 업종 정보 → classifyTransaction 활용)
 // ============================================================
 function classifyCashReceipt(
   row: CashReceiptRow,
-  naverCategory: string,
+  bizInfo: BusinessInfo,
   conditions: BusinessConditions
 ): ClassificationResult {
-  // classifyTransaction 로직 활용 (거래처명 + 네이버 카테고리 병합)
+  // classifyTransaction에 업태/종목 정보 전달
   const txRow: TransactionRow = {
     tradeName: row.거래처,
-    businessType: naverCategory,
-    sector: "",
+    businessType: bizInfo.sector,
+    sector: bizInfo.type,
     amount: row.합계,
     ntsStatus: row.국세청,
     taxType: row.유형,
@@ -217,9 +229,9 @@ function classifyCashReceipt(
     return result;
   }
 
-  // 네이버 카테고리로 추가 시도
-  if (naverCategory) {
-    const category = classifyBusiness(naverCategory);
+  // 네이버 카테고리로 추가 분류 시도
+  if (bizInfo.sector) {
+    const category = classifyBusiness(bizInfo.sector);
     if (category.label !== "일반사업체") {
       const catAccount = CATEGORY_ACCOUNT_MAP[category.label];
       if (catAccount) {
@@ -228,7 +240,7 @@ function classifyCashReceipt(
           name: catAccount.name,
           tag: catAccount.tag,
           confidence: "medium",
-          note: `네이버: ${naverCategory}`,
+          note: `${bizInfo.source === "db" ? "DB" : "네이버"}: ${bizInfo.sector}`,
         };
       }
     }
@@ -318,8 +330,8 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
   const [dragging, setDragging] = useState(false);
   const [filter, setFilter] = useState<"all" | "changed" | "review" | "exclude">("all");
 
-  // 네이버 검색 캐시 (거래처명 → 카테고리)
-  const naverCacheRef = useRef<Map<string, string>>(new Map());
+  // 업종 조회 캐시 (거래처명 → BusinessInfo)
+  const bizCacheRef = useRef<Map<string, BusinessInfo>>(new Map());
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.name.match(/\.xlsx?$/i)) {
@@ -339,53 +351,40 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
         return;
       }
 
-      // 고유 거래처명 + Code(사업자번호) 매핑
-      const uniqueEntries = new Map<string, string>(); // 거래처명 → Code
+      // 고유 거래처명 + Code 매핑
+      const uniqueEntries = new Map<string, string>();
       for (const r of rows) {
         if (!uniqueEntries.has(r.거래처)) {
           uniqueEntries.set(r.거래처, r.Code);
         }
       }
       const uniqueNames = [...uniqueEntries.keys()];
-      const cache = naverCacheRef.current;
+      const cache = bizCacheRef.current;
 
       const uncached = uniqueNames.filter((n) => !cache.has(n));
       setProgress({ current: 0, total: uncached.length });
 
-      // 1단계: DB 우선 조회 (사업자번호가 있는 거래처)
-      const dbBatch: string[] = [];
-      for (const name of uncached) {
-        const code = uniqueEntries.get(name) || "";
-        if (code) {
-          const dbResult = await searchDbByBno(code);
-          if (dbResult && (dbResult.b_sector || dbResult.b_type)) {
-            cache.set(name, [dbResult.b_sector, dbResult.b_type].filter(Boolean).join(">"));
-            continue;
-          }
-        }
-        dbBatch.push(name);
-      }
-
-      // 2단계: DB에 없는 거래처만 네이버 검색 (병렬 5개씩)
-      for (let i = 0; i < dbBatch.length; i += 5) {
-        const batch = dbBatch.slice(i, i + 5);
-        const results = await Promise.all(batch.map(searchNaverCategory));
+      // DB/네이버 순차 조회 (5개씩 병렬)
+      for (let i = 0; i < uncached.length; i += 5) {
+        const batch = uncached.slice(i, i + 5);
+        const results = await Promise.all(
+          batch.map((name) => lookupBusinessInfo(name, uniqueEntries.get(name) || ""))
+        );
         batch.forEach((name, idx) => {
-          const r = results[idx];
-          cache.set(name, r?.category || "");
+          cache.set(name, results[idx]);
         });
-        setProgress({ current: Math.min(i + 5, dbBatch.length), total: dbBatch.length });
+        setProgress({ current: Math.min(i + 5, uncached.length), total: uncached.length });
       }
 
       // 분류 실행
       const classifiedRows: ClassifiedCashRow[] = rows.map((input) => {
-        const naverCategory = cache.get(input.거래처) || "";
-        const result = classifyCashReceipt(input, naverCategory, conditions);
+        const bizInfo = cache.get(input.거래처) || { sector: "", type: "", source: "" as const };
+        const result = classifyCashReceipt(input, bizInfo, conditions);
         const changed = validateExisting(input, result);
         return {
           input,
           result,
-          naverCategory,
+          bizInfo,
           original차변: input.차변계정,
           changed,
         };
@@ -402,10 +401,10 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
   const handleReClassify = () => {
     if (classified.length === 0) return;
     const results = classified.map((c) => {
-      const naverCategory = naverCacheRef.current.get(c.input.거래처) || "";
-      const result = classifyCashReceipt(c.input, naverCategory, conditions);
+      const bizInfo = bizCacheRef.current.get(c.input.거래처) || { sector: "", type: "", source: "" as const };
+      const result = classifyCashReceipt(c.input, bizInfo, conditions);
       const changed = validateExisting(c.input, result);
-      return { ...c, result, changed };
+      return { ...c, result, bizInfo, changed };
     });
     setClassified(results);
   };
@@ -620,7 +619,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                         <th className="p-2 text-center">→</th>
                         <th className="p-2 text-left">분류 결과</th>
                         <th className="p-2 text-center">태그</th>
-                        <th className="p-2 text-left">네이버 업종</th>
+                        <th className="p-2 text-left">업종(DB/네이버)</th>
                       </tr>
                     </thead>
                     <tbody className="font-bold text-slate-700">
@@ -684,7 +683,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                               )}
                             </td>
                             <td className="p-2 text-[10px] text-slate-400 max-w-[100px] truncate">
-                              {c.naverCategory || "-"}
+                              {c.bizInfo.sector ? `${c.bizInfo.source === "db" ? "[DB]" : ""} ${c.bizInfo.sector}` : "-"}
                             </td>
                           </tr>
                         );
