@@ -59,7 +59,7 @@ export const CATEGORY_RULES: { keywords: string[]; label: string; emoji: string;
   { keywords: ['광고', '디자인', '마케팅', '홍보', '기획'], label: '광고', emoji: '📢', desc: '광고/마케팅업입니다', color: '#D84315', bg: '#FBE9E7' },
 
   // I: 숙박 및 음식점업
-  { keywords: ['음식점', '식당', '한식', '중식', '일식', '양식', '카페', '커피', '빵', '베이커리', '치킨', '피자', '분식', '횟집', '고기', '삼겹살', '떡볶이', '국밥', '찌개', '냉면', '해장국', '김밥', '도시락', '뷔페'], label: '음식점', emoji: '🍽️', desc: '음식점입니다', color: '#FF6B35', bg: '#FFF3ED' },
+  { keywords: ['음식점', '식당', '한식', '중식', '일식', '양식', '카페', '커피', '빵', '베이커리', '치킨', '피자', '분식', '횟집', '고기', '삼겹살', '떡볶이', '국밥', '찌개', '냉면', '해장국', '김밥', '도시락', '뷔페', '돈까스', '돈가스', '한우', '족발', '보쌈', '곱창', '막창', '갈비', '생선구이', '초밥', '스시', '우동', '라멘', '파스타', '스테이크', '햄버거', '샌드위치', '떡', '디저트', '아이스크림', '주먹밥'], label: '음식점', emoji: '🍽️', desc: '음식점입니다', color: '#FF6B35', bg: '#FFF3ED' },
   { keywords: ['주점', '술집', '포차', '바', '호프', '소주방', '맥주'], label: '주점', emoji: '🍺', desc: '주점입니다', color: '#BF360C', bg: '#FBE9E7' },
   { keywords: ['호텔', '모텔', '펜션', '숙박', '게스트하우스', '민박', '리조트'], label: '숙박', emoji: '🏨', desc: '숙박업입니다', color: '#6A1B9A', bg: '#F3E5F5' },
 
@@ -70,10 +70,10 @@ export const CATEGORY_RULES: { keywords: string[]; label: string; emoji: string;
   { keywords: ['편의점', 'GS25', 'CU', '씨유', '세븐일레븐', '이마트24', '미니스톱'], label: '편의점', emoji: '🏪', desc: '편의점입니다', color: '#2196F3', bg: '#E3F2FD' },
   { keywords: ['마트', '이마트', '홈플러스', '롯데마트', '슈퍼', '하나로', '농협마트'], label: '마트', emoji: '🛒', desc: '마트/슈퍼입니다', color: '#4CAF50', bg: '#E8F5E9' },
   { keywords: ['주유', 'LPG', '가스충전', '충전소'], label: '주유소', emoji: '⛽', desc: '주유소입니다', color: '#FF9800', bg: '#FFF3E0' },
-  { keywords: ['도매', '도매업', '무역', '수출', '수입', '상사', '트레이딩'], label: '도매/무역', emoji: '📦', desc: '도매/무역업입니다', color: '#0277BD', bg: '#E1F5FE' },
-  { keywords: ['의류', '옷', '패션', '의복', '잡화', '백화점', '아울렛'], label: '의류/패션', emoji: '👗', desc: '의류/패션업입니다', color: '#AD1457', bg: '#FCE4EC' },
+  { keywords: ['도매', '도매업', '무역', '수출', '수입', '상사', '트레이딩', '인터내셔날', '인터내셔널', '유통'], label: '도매/무역', emoji: '📦', desc: '도매/무역업입니다', color: '#0277BD', bg: '#E1F5FE' },
+  { keywords: ['의류', '옷', '패션', '의복', '잡화', '백화점', '아울렛', '한섬'], label: '의류/패션', emoji: '👗', desc: '의류/패션업입니다', color: '#AD1457', bg: '#FCE4EC' },
   { keywords: ['꽃', '화훼', '플라워', '꽃집', '화원'], label: '화훼', emoji: '💐', desc: '꽃집/화훼업입니다', color: '#C62828', bg: '#FFEBEE' },
-  { keywords: ['약', '의약품', '의료기기', '제약'], label: '의약품', emoji: '💊', desc: '의약품판매업입니다', color: '#1B5E20', bg: '#E8F5E9' },
+  { keywords: ['약', '의약품', '의료기기', '제약', '후디스'], label: '의약품', emoji: '💊', desc: '의약품판매업입니다', color: '#1B5E20', bg: '#E8F5E9' },
   { keywords: ['화장품', '코스메틱'], label: '화장품', emoji: '🧴', desc: '화장품판매업입니다', color: '#880E4F', bg: '#FCE4EC' },
   { keywords: ['가구', '인테리어', '가구점'], label: '가구', emoji: '🪑', desc: '가구/인테리어업입니다', color: '#4E342E', bg: '#EFEBE9' },
   { keywords: ['전자', '전자제품', '컴퓨터', '핸드폰', '휴대폰', '통신기기'], label: '전자제품', emoji: '🖥️', desc: '전자제품판매업입니다', color: '#283593', bg: '#E8EAF6' },
@@ -104,7 +104,7 @@ export const CATEGORY_RULES: { keywords: string[]; label: string; emoji: string;
   { keywords: ['택시', '버스', '여객', '렌터카', '렌트카', '대리운전'], label: '여객운수', emoji: '🚕', desc: '여객운수업입니다', color: '#00838F', bg: '#E0F7FA' },
 
   // J: 정보통신업
-  { keywords: ['IT', '소프트웨어', '개발', '프로그램', '시스템', '데이터', '클라우드', '웹', '앱', '정보통신', '플랫폼', '인터넷', '포털', '네이버', '카카오', '라인', '배달의민족', '배민', '당근마켓', '당근', '토스', '야놀자', '직방', 'naver', 'kakao', 'toss'], label: 'IT', emoji: '💻', desc: 'IT/소프트웨어업입니다', color: '#3F51B5', bg: '#E8EAF6' },
+  { keywords: ['IT', '소프트웨어', '개발', '프로그램', '시스템', '데이터', '클라우드', '웹', '앱', '정보통신', '플랫폼', '인터넷', '포털', '네이버', '카카오', '라인', '배달의민족', '배민', '당근마켓', '당근', '토스', '야놀자', '직방', 'naver', 'kakao', 'toss', 'AI', '넥슨', '게임즈'], label: 'IT', emoji: '💻', desc: 'IT/소프트웨어업입니다', color: '#3F51B5', bg: '#E8EAF6' },
   { keywords: ['통신', '방송', '미디어', '영상', '촬영', '사진', '스튜디오', 'SKT', 'KT', 'LGU'], label: '미디어', emoji: '🎬', desc: '미디어/통신업입니다', color: '#512DA8', bg: '#EDE7F6' },
   { keywords: ['출판', '인쇄', '복사', '출력', '서적'], label: '출판/인쇄', emoji: '📰', desc: '출판/인쇄업입니다', color: '#424242', bg: '#F5F5F5' },
 
@@ -113,7 +113,7 @@ export const CATEGORY_RULES: { keywords: string[]; label: string; emoji: string;
   { keywords: ['보험', '손해보험', '생명보험', '보험대리'], label: '보험', emoji: '🛡️', desc: '보험업입니다', color: '#00695C', bg: '#E0F2F1' },
 
   // C: 제조업
-  { keywords: ['제조', '공장', '생산', '가공', '조립'], label: '제조', emoji: '🏭', desc: '제조업입니다', color: '#9E9E9E', bg: '#F5F5F5' },
+  { keywords: ['제조', '공장', '생산', '가공', '조립', '솔루션'], label: '제조', emoji: '🏭', desc: '제조업입니다', color: '#9E9E9E', bg: '#F5F5F5' },
 
   // R: 예술/스포츠/여가 서비스업
   { keywords: ['헬스', '피트니스', '체육', '스포츠', '골프', '수영', '요가', '필라테스', '태권도', '합기도', '무술', '체육관'], label: '스포츠', emoji: '🏋️', desc: '스포츠/체육시설입니다', color: '#E64A19', bg: '#FBE9E7' },
@@ -126,7 +126,7 @@ export const CATEGORY_RULES: { keywords: string[]; label: string; emoji: string;
   { keywords: ['인력', '파견', '용역', '아웃소싱', '인재'], label: '인력파견', emoji: '👥', desc: '인력파견/용역업입니다', color: '#455A64', bg: '#ECEFF1' },
 
   // A: 농업/임업/어업
-  { keywords: ['농업', '농장', '농산물', '축산', '목장', '양식', '어업', '수산', '임업'], label: '농축수산', emoji: '🌾', desc: '농축수산업입니다', color: '#33691E', bg: '#F1F8E9' },
+  { keywords: ['농업', '농장', '농산물', '축산', '목장', '양식', '어업', '수산', '임업', '유업', '유가공', '낙농', '푸드', '식품', '과일'], label: '농축수산', emoji: '🌾', desc: '농축수산업입니다', color: '#33691E', bg: '#F1F8E9' },
 
   // 자동차 관련
   { keywords: ['자동차', '카센터', '정비', '중고차', '세차', '자동차매매'], label: '자동차', emoji: '🚗', desc: '자동차관련업입니다', color: '#37474F', bg: '#ECEFF1' },

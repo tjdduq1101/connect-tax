@@ -114,20 +114,24 @@ function parseCashReceiptExcel(buffer: ArrayBuffer): CashReceiptRow[] {
 }
 
 // ============================================================
-// 거래처명 정규화 (BusinessLookup과 동일)
+// 거래처명 정규화
 // ============================================================
+const CORP_PATTERN = /(주식회사|유한회사|유한책임회사|（주）|\(주\)|㈜|농업회사법인|어업회사법인|영농조합법인|사회적협동조합|\(|\)|\s)/g;
+
 function normalizeName(name: string): string {
-  return name.replace(/(주식회사|유한회사|유한책임회사|（주）|\(주\)|㈜|\(|\)|\s)/g, "").toLowerCase();
+  return name.replace(CORP_PATTERN, "").toLowerCase();
 }
 
 function isNameMatch(title: string, query: string): boolean {
   const t = normalizeName(title);
   const q = normalizeName(query);
-  return t === q || t.startsWith(q) || q.startsWith(t);
+  if (!t || !q) return false;
+  // 정확히 같거나, 한쪽이 다른쪽을 포함하면 매칭
+  return t === q || t.includes(q) || q.includes(t);
 }
 
 function cleanCorpName(name: string): string {
-  return name.replace(/(주식회사|유한회사|유한책임회사|（주）|\(주\)|㈜|\(|\))/g, "").trim();
+  return name.replace(CORP_PATTERN, "").trim();
 }
 
 // ============================================================
