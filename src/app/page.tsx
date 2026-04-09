@@ -697,8 +697,8 @@ export default function MainPage() {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-slate-900">
       {activeTab === 'home' && (
         <div className="w-full max-w-md animate-in fade-in zoom-in duration-500 text-center">
-          <div className="bg-blue-600 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-blue-200">
-            <span className="text-white text-3xl font-black">C</span>
+          <div className="w-16 h-16 rounded-3xl mx-auto mb-4 shadow-xl shadow-blue-200 overflow-hidden">
+            <img src="/favicon.ico" alt="커넥트 세무회계" className="w-full h-full object-cover" />
           </div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight">커넥트 세무회계</h1>
           <p className="text-slate-500 font-bold mt-1 mb-10">김성엽 대리 업무 전용 툴박스</p>

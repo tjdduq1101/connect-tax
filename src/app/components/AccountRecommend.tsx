@@ -385,7 +385,7 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
   const [savingRule, setSavingRule] = useState(false);
 
   // 필터
-  const [filter, setFilter] = useState<"all" | "review" | "exclude">("all");
+  const [filter, setFilter] = useState<"all" | "high" | "review" | "exclude">("all");
 
   const handleFile = useCallback(async (file: File) => {
     if (!file.name.match(/\.xlsx?$/i)) {
@@ -603,6 +603,7 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
 
   // 필터된 목록
   const filteredRows = classified.filter((c) => {
+    if (filter === "high") return c.result.confidence === "high";
     if (filter === "review") return c.result.confidence === "low" || c.result.confidence === "medium";
     if (filter === "exclude") return c.result.tag === "전송제외";
     return true;
@@ -790,10 +791,17 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
                   <p className="text-lg font-black">{total}</p>
                   <p className="text-[10px] font-bold opacity-70">전체</p>
                 </button>
-                <div className="p-3 rounded-xl bg-green-50 text-center">
-                  <p className="text-lg font-black text-green-600">{highCount}</p>
-                  <p className="text-[10px] font-bold text-green-500">자동분류</p>
-                </div>
+                <button
+                  onClick={() => setFilter("high")}
+                  className={`p-3 rounded-xl text-center transition-colors ${
+                    filter === "high"
+                      ? "bg-green-500 text-white"
+                      : "bg-green-50 text-green-600 hover:bg-green-100"
+                  }`}
+                >
+                  <p className="text-lg font-black">{highCount}</p>
+                  <p className="text-[10px] font-bold opacity-70">자동분류</p>
+                </button>
                 <button
                   onClick={() => setFilter("review")}
                   className={`p-3 rounded-xl text-center transition-colors ${
