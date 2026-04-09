@@ -1,13 +1,39 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 import {
   classifyTransaction,
+  classifyBusiness,
+  CATEGORY_ACCOUNT_MAP,
   ACCOUNT_NAME_TO_CODE,
   type TransactionRow,
   type BusinessConditions,
   type ClassificationResult,
 } from "@/lib/accountClassifier";
+
+// ============================================================
+// AI Classification Types
+// ============================================================
+interface AiClassifyResult {
+  tradeName: string;
+  code: string;
+  name: string;
+  tag: string;
+  reasoning: string;
+  isNewRule: boolean;
+  suggestedExample?: string;
+}
+
+interface NewRuleCandidate {
+  aiResult: AiClassifyResult;
+  confirmed: boolean;
+  editing: boolean;
+  editCode: string;
+  editName: string;
+  editTag: string;
+  editExample: string;
+  editNote: string;
+}
 
 // ============================================================
 // Types
@@ -37,6 +63,104 @@ interface InputRow {
 interface ClassifiedRow {
   input: InputRow;
   result: ClassificationResult;
+  bizInfo: BusinessInfo;
+  aiResult?: AiClassifyResult;
+}
+
+interface BusinessInfo {
+  sector: string;
+  type: string;
+  source: "" | "db" | "naver";
+}
+
+// ============================================================
+// 거래처명 정규화 및 매칭
+// ============================================================
+function normalizeName(name: string): string {
+  return name.replace(/(주식회사|유한회사|유한책임회사|（주）|\(주\)|㈜|\(|\)|\s)/g, "").toLowerCase();
+}
+
+function isNameMatch(title: string, query: string): boolean {
+  const t = normalizeName(title);
+  const q = normalizeName(query);
+  if (!t || !q) return false;
+  return t === q || t.startsWith(q) || q.startsWith(t);
+}
+
+function cleanCorpName(name: string): string {
+  return name.replace(/(주식회사|유한회사|유한책임회사|（주）|\(주\)|㈜|\(|\))/g, "").trim();
+}
+
+// ============================================================
+// DB 조회
+// ============================================================
+async function searchDbByBno(bno: string): Promise<BusinessInfo | null> {
+  if (!bno || bno.replace(/[^0-9]/g, "").length !== 10) return null;
+  try {
+    const cleaned = bno.replace(/[^0-9]/g, "");
+    const res = await fetch(`/api/db/search?bno=${encodeURIComponent(cleaned)}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const d = json.data;
+    if (!d) return null;
+    if (!d.b_sector && !d.b_type) return null;
+    return { sector: d.b_sector || "", type: d.b_type || "", source: "db" };
+  } catch {
+    return null;
+  }
+}
+
+async function searchDbByName(tradeName: string): Promise<BusinessInfo | null> {
+  try {
+    const res = await fetch(`/api/db/search?name=${encodeURIComponent(tradeName)}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const d = json.data;
+    if (!d) return null;
+    if (!d.b_sector && !d.b_type) return null;
+    return { sector: d.b_sector || "", type: d.b_type || "", source: "db" };
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================
+// 네이버 검색 — 법인접미사 제거 후 검색, 상위 3개 매칭 검증
+// ============================================================
+async function searchNaverBizInfo(tradeName: string): Promise<BusinessInfo | null> {
+  try {
+    const cleaned = cleanCorpName(tradeName);
+    if (!cleaned) return null;
+    const res = await fetch(`/api/naver/search?q=${encodeURIComponent(cleaned)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const items = (data.items || []).slice(0, 3);
+
+    for (const item of items) {
+      if (isNameMatch(item.title, cleaned)) {
+        return { sector: item.category || "", type: "", source: "naver" };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================
+// 거래처 업종 조회: DB 우선 → 네이버 폴백
+// ============================================================
+async function lookupBusinessInfo(tradeName: string, bno: string): Promise<BusinessInfo> {
+  const dbByBno = await searchDbByBno(bno);
+  if (dbByBno) return dbByBno;
+
+  const dbByName = await searchDbByName(tradeName);
+  if (dbByName) return dbByName;
+
+  const naver = await searchNaverBizInfo(tradeName);
+  if (naver) return naver;
+
+  return { sector: "", type: "", source: "" };
 }
 
 // ============================================================
@@ -124,22 +248,49 @@ function parseInputExcel(buffer: ArrayBuffer): InputRow[] {
   return rows;
 }
 
-function classifyAll(
-  rows: InputRow[],
+function classifyRow(
+  input: InputRow,
+  bizInfo: BusinessInfo,
   conditions: BusinessConditions
-): ClassifiedRow[] {
-  return rows.map((input) => {
-    const txRow: TransactionRow = {
-      tradeName: input.거래처,
-      businessType: input.업태,
-      sector: input.종목,
-      amount: input.합계,
-      ntsStatus: input.국세청,
-      taxType: input.유형,
-    };
-    const result = classifyTransaction(txRow, conditions);
-    return { input, result };
-  });
+): ClassificationResult {
+  // 업태/종목: 엑셀 데이터 우선, 없으면 DB/네이버 데이터 사용
+  const businessType = input.업태 || bizInfo.sector;
+  const sector = input.종목 || bizInfo.type;
+
+  const txRow: TransactionRow = {
+    tradeName: input.거래처,
+    businessType,
+    sector,
+    amount: input.합계,
+    ntsStatus: input.국세청,
+    taxType: input.유형,
+  };
+
+  const result = classifyTransaction(txRow, conditions);
+
+  if (result.confidence !== "low") {
+    return result;
+  }
+
+  // low confidence일 때 DB/네이버 카테고리로 추가 분류 시도
+  const categoryText = bizInfo.sector || businessType;
+  if (categoryText) {
+    const category = classifyBusiness(categoryText);
+    if (category.label !== "일반사업체") {
+      const catAccount = CATEGORY_ACCOUNT_MAP[category.label];
+      if (catAccount) {
+        return {
+          code: catAccount.code,
+          name: catAccount.name,
+          tag: catAccount.tag,
+          confidence: "medium",
+          note: `${bizInfo.source === "db" ? "DB" : bizInfo.source === "naver" ? "네이버" : "카테고리"}: ${categoryText}`,
+        };
+      }
+    }
+  }
+
+  return result;
 }
 
 function buildSmartA10Workbook(classified: ClassifiedRow[]): XLSX.WorkBook {
@@ -218,14 +369,25 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
   const [fileName, setFileName] = useState("");
   const [classified, setClassified] = useState<ClassifiedRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
+  // DB/네이버 조회 캐시 (거래처명 → BusinessInfo)
+  const bizCacheRef = useRef<Map<string, BusinessInfo>>(new Map());
+
+  // AI 분류
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const [newRuleCandidates, setNewRuleCandidates] = useState<NewRuleCandidate[]>([]);
+  const [showNewRuleModal, setShowNewRuleModal] = useState(false);
+  const [savingRule, setSavingRule] = useState(false);
+
   // 필터
   const [filter, setFilter] = useState<"all" | "review" | "exclude">("all");
 
-  const handleFile = async (file: File) => {
+  const handleFile = useCallback(async (file: File) => {
     if (!file.name.match(/\.xlsx?$/i)) {
       setError("xlsx 파일만 업로드 가능합니다.");
       return;
@@ -242,30 +404,187 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
         setError("데이터를 찾을 수 없습니다. 파일 형식을 확인해주세요.");
         return;
       }
-      const results = classifyAll(rows, conditions);
-      setClassified(results);
+
+      // 고유 거래처명 + 사업자번호 매핑
+      const uniqueEntries = new Map<string, string>();
+      for (const r of rows) {
+        if (!uniqueEntries.has(r.거래처)) {
+          uniqueEntries.set(r.거래처, r.사업자등록번호 || r.Code);
+        }
+      }
+      const uniqueNames = [...uniqueEntries.keys()];
+      const cache = bizCacheRef.current;
+
+      const uncached = uniqueNames.filter((n) => !cache.has(n));
+      setProgress({ current: 0, total: uncached.length });
+
+      // DB/네이버 순차 조회 (5개씩 병렬)
+      for (let i = 0; i < uncached.length; i += 5) {
+        const batch = uncached.slice(i, i + 5);
+        const results = await Promise.all(
+          batch.map((name) => lookupBusinessInfo(name, uniqueEntries.get(name) || ""))
+        );
+        batch.forEach((name, idx) => {
+          cache.set(name, results[idx]);
+        });
+        setProgress({ current: Math.min(i + 5, uncached.length), total: uncached.length });
+      }
+
+      // 분류 실행
+      const classifiedRows: ClassifiedRow[] = rows.map((input) => {
+        const bizInfo = cache.get(input.거래처) || { sector: "", type: "", source: "" as const };
+        const result = classifyRow(input, bizInfo, conditions);
+        return { input, result, bizInfo };
+      });
+
+      setClassified(classifiedRows);
+
+      // AI 분류 자동 실행 (low confidence 항목 대상)
+      const hasLow = classifiedRows.some((c) => c.result.confidence === "low");
+      if (hasLow) {
+        runAiClassify(classifiedRows).then((updated) => {
+          setClassified(updated);
+        });
+      }
     } catch {
       setError("파일을 읽는 중 오류가 발생했습니다.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [conditions]);
 
   const handleReClassify = () => {
     if (classified.length === 0) return;
-    const rows = classified.map((c) => c.input);
-    const results = rows.map((input) => {
-      const txRow: TransactionRow = {
-        tradeName: input.거래처,
-        businessType: input.업태,
-        sector: input.종목,
-        amount: input.합계,
-        ntsStatus: input.국세청,
-        taxType: input.유형,
-      };
-      return { input, result: classifyTransaction(txRow, conditions) };
+    const results = classified.map((c) => {
+      const bizInfo = bizCacheRef.current.get(c.input.거래처) || { sector: "", type: "", source: "" as const };
+      const result = classifyRow(c.input, bizInfo, conditions);
+      return { input: c.input, result, bizInfo };
     });
     setClassified(results);
+  };
+
+  // AI 분류 실행 (low confidence 항목 대상)
+  const runAiClassify = useCallback(async (rows: ClassifiedRow[]) => {
+    const lowItems = rows.filter((c) => c.result.confidence === "low");
+    if (lowItems.length === 0) return rows;
+
+    setAiLoading(true);
+    setAiError("");
+
+    try {
+      // 1. 노션 규칙 조회
+      const rulesRes = await fetch("/api/notion/rules");
+      if (!rulesRes.ok) {
+        setAiLoading(false);
+        return rows; // 노션 연결 실패 시 기존 결과 유지
+      }
+      const { rules } = await rulesRes.json();
+
+      // 2. AI 분류 요청 (20개씩 batch)
+      const allAiResults: AiClassifyResult[] = [];
+      for (let i = 0; i < lowItems.length; i += 20) {
+        const batch = lowItems.slice(i, i + 20);
+        const items = batch.map((c) => ({
+          tradeName: c.input.거래처,
+          businessType: c.input.업태 || c.bizInfo.sector,
+          sector: c.input.종목 || c.bizInfo.type,
+          amount: c.input.합계,
+          conditions,
+        }));
+
+        const aiRes = await fetch("/api/ai/classify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items, rules }),
+        });
+
+        if (aiRes.ok) {
+          const data = await aiRes.json();
+          allAiResults.push(...(data.results || []));
+        }
+      }
+
+      // 3. AI 결과를 classified에 반영
+      const aiMap = new Map<string, AiClassifyResult>();
+      for (const r of allAiResults) {
+        aiMap.set(r.tradeName, r);
+      }
+
+      const updated = rows.map((c) => {
+        if (c.result.confidence !== "low") return c;
+        const ai = aiMap.get(c.input.거래처);
+        if (!ai) return c;
+        return {
+          ...c,
+          result: {
+            code: ai.code,
+            name: ai.name,
+            tag: ai.tag,
+            confidence: "low" as const,
+            note: `AI: ${ai.reasoning}`,
+          },
+          aiResult: ai,
+        };
+      });
+
+      // 4. 신규 규칙 후보 수집
+      const newRules = allAiResults
+        .filter((r) => r.isNewRule)
+        .map((r) => ({
+          aiResult: r,
+          confirmed: false,
+          editing: false,
+          editCode: r.code,
+          editName: r.name,
+          editTag: r.tag,
+          editExample: r.suggestedExample || r.tradeName,
+          editNote: "",
+        }));
+
+      if (newRules.length > 0) {
+        setNewRuleCandidates(newRules);
+        setShowNewRuleModal(true);
+      }
+
+      setAiLoading(false);
+      return updated;
+    } catch (err) {
+      console.error("AI classify error:", err);
+      setAiError("AI 분류 중 오류가 발생했습니다.");
+      setAiLoading(false);
+      return rows;
+    }
+  }, [conditions]);
+
+  // 신규 규칙 노션에 저장
+  const saveNewRule = async (candidate: NewRuleCandidate) => {
+    setSavingRule(true);
+    try {
+      const res = await fetch("/api/notion/rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          example: candidate.editExample,
+          code: candidate.editCode,
+          name: candidate.editName,
+          tags: [candidate.editTag],
+          note: candidate.editNote,
+        }),
+      });
+      if (res.ok) {
+        setNewRuleCandidates((prev) =>
+          prev.map((c) =>
+            c.aiResult.tradeName === candidate.aiResult.tradeName
+              ? { ...c, confirmed: true }
+              : c
+          )
+        );
+      }
+    } catch {
+      // 저장 실패 시 무시
+    } finally {
+      setSavingRule(false);
+    }
   };
 
   const handleDownload = () => {
@@ -278,7 +597,8 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
   const total = classified.length;
   const highCount = classified.filter((c) => c.result.confidence === "high").length;
   const mediumCount = classified.filter((c) => c.result.confidence === "medium").length;
-  const lowCount = classified.filter((c) => c.result.confidence === "low").length;
+  const lowCount = classified.filter((c) => c.result.confidence === "low" && !c.aiResult).length;
+  const aiCount = classified.filter((c) => c.aiResult).length;
   const excludeCount = classified.filter((c) => c.result.tag === "전송제외").length;
 
   // 필터된 목록
@@ -289,7 +609,7 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
   });
 
   return (
-    <div className="w-full max-w-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="w-full max-w-5xl animate-in fade-in slide-in-from-bottom-4 duration-500">
       <button
         onClick={onBack}
         className="mb-4 text-slate-400 hover:text-blue-600 text-sm font-bold flex items-center gap-1 transition-colors"
@@ -427,9 +747,11 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
               }}
             />
             {loading ? (
-              <div className="flex items-center justify-center gap-2 text-slate-500 font-bold text-sm">
+              <div className="flex flex-col items-center justify-center gap-2 text-slate-500 font-bold text-sm">
                 <span className="inline-block w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
-                분류 중...
+                {progress.total > 0
+                  ? `거래처 조회 중... (${progress.current}/${progress.total})`
+                  : "분류 중..."}
               </div>
             ) : (
               <>
@@ -483,6 +805,12 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
                   <p className="text-lg font-black">{mediumCount + lowCount}</p>
                   <p className="text-[10px] font-bold opacity-70">확인필요</p>
                 </button>
+                {aiCount > 0 && (
+                  <div className="p-3 rounded-xl bg-violet-50 text-center">
+                    <p className="text-lg font-black text-violet-600">{aiCount}</p>
+                    <p className="text-[10px] font-bold text-violet-500">AI추천</p>
+                  </div>
+                )}
                 <button
                   onClick={() => setFilter("exclude")}
                   className={`p-3 rounded-xl text-center transition-colors ${
@@ -498,25 +826,29 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
 
               {/* 테이블 */}
               <div className="border rounded-2xl overflow-hidden">
-                <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                   <table className="w-full text-xs">
-                    <thead className="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase sticky top-0">
+                    <thead className="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase sticky top-0 z-10">
                       <tr>
                         <th className="p-2 text-left w-8">#</th>
                         <th className="p-2 text-left">거래처</th>
-                        <th className="p-2 text-right">합계</th>
+                        <th className="p-2 text-right whitespace-nowrap">합계</th>
                         <th className="p-2 text-center">코드</th>
                         <th className="p-2 text-left">계정과목</th>
                         <th className="p-2 text-center">태그</th>
                         <th className="p-2 text-center">신뢰도</th>
+                        <th className="p-2 text-left">업종(엑셀/DB/네이버)</th>
                       </tr>
                     </thead>
                     <tbody className="font-bold text-slate-700">
                       {filteredRows.map((c, i) => {
-                        const isLow = c.result.confidence === "low";
+                        const isAi = !!c.aiResult;
+                        const isLow = c.result.confidence === "low" && !isAi;
                         const isMedium = c.result.confidence === "medium";
                         const isExclude = c.result.tag === "전송제외";
-                        const rowBg = isLow
+                        const rowBg = isAi
+                          ? "bg-violet-50"
+                          : isLow
                           ? "bg-red-50"
                           : isMedium
                           ? "bg-amber-50"
@@ -531,12 +863,19 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
                             : c.result.tag === "전송제외"
                             ? "bg-red-100 text-red-600"
                             : "bg-slate-100 text-slate-500";
-                        const confColor =
-                          c.result.confidence === "high"
+                        const confColor = isAi
+                          ? "text-violet-500"
+                          : c.result.confidence === "high"
                             ? "text-green-500"
                             : c.result.confidence === "medium"
                             ? "text-amber-500"
                             : "text-red-500";
+                        // 업종 표시: 엑셀 업태/종목 우선, 없으면 DB/네이버
+                        const excelBiz = [c.input.업태, c.input.종목].filter(Boolean).join(" / ");
+                        const fetchedBiz = c.bizInfo.sector
+                          ? `[${c.bizInfo.source === "db" ? "DB" : "N"}] ${c.bizInfo.sector}${c.bizInfo.type ? " / " + c.bizInfo.type : ""}`
+                          : "";
+                        const bizDisplay = excelBiz || fetchedBiz || "-";
 
                         return (
                           <tr
@@ -546,19 +885,19 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
                             <td className="p-2 text-slate-300">
                               {classified.indexOf(c) + 1}
                             </td>
-                            <td className="p-2 max-w-[180px] truncate">
+                            <td className="p-2 max-w-[160px] truncate">
                               {c.input.거래처}
                             </td>
-                            <td className="p-2 text-right text-slate-500">
+                            <td className="p-2 text-right text-slate-500 whitespace-nowrap">
                               {c.input.합계.toLocaleString()}
                             </td>
                             <td className="p-2 text-center font-black">
                               {c.result.code || "-"}
                             </td>
-                            <td className="p-2">
+                            <td className="p-2 whitespace-nowrap">
                               {c.result.name || "-"}
                               {c.result.note && (
-                                <span className="block text-[9px] text-slate-400 font-normal truncate max-w-[120px]">
+                                <span className="block text-[9px] text-slate-400 font-normal">
                                   {c.result.note}
                                 </span>
                               )}
@@ -566,18 +905,23 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
                             <td className="p-2 text-center">
                               {c.result.tag && (
                                 <span
-                                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${tagColor}`}
+                                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap ${tagColor}`}
                                 >
                                   {c.result.tag}
                                 </span>
                               )}
                             </td>
                             <td className={`p-2 text-center text-[10px] ${confColor}`}>
-                              {c.result.confidence === "high"
+                              {isAi
+                                ? "◇"
+                                : c.result.confidence === "high"
                                 ? "●"
                                 : c.result.confidence === "medium"
                                 ? "◐"
                                 : "○"}
+                            </td>
+                            <td className="p-2 text-[10px] text-slate-400 max-w-[180px] truncate">
+                              {bizDisplay}
                             </td>
                           </tr>
                         );
@@ -596,9 +940,40 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
                   <span className="text-amber-500">◐</span> 카테고리추정
                 </span>
                 <span className="flex items-center gap-1">
+                  <span className="text-violet-500">◇</span> AI추천
+                </span>
+                <span className="flex items-center gap-1">
                   <span className="text-red-500">○</span> 미분류
                 </span>
               </div>
+
+              {/* AI 로딩 */}
+              {aiLoading && (
+                <div className="flex items-center justify-center gap-2 py-3 bg-violet-50 rounded-2xl">
+                  <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-xs font-bold text-violet-600">
+                    AI가 미분류 거래처를 분석 중입니다...
+                  </span>
+                </div>
+              )}
+
+              {/* AI 에러 */}
+              {aiError && (
+                <div className="text-xs text-red-500 font-bold text-center py-2 bg-red-50 rounded-xl">
+                  {aiError}
+                </div>
+              )}
+
+              {/* 신규 규칙 알림 */}
+              {newRuleCandidates.length > 0 && !showNewRuleModal && newRuleCandidates.some((c) => !c.confirmed) && (
+                <button
+                  onClick={() => setShowNewRuleModal(true)}
+                  className="w-full py-3 bg-violet-100 hover:bg-violet-200 text-violet-700 rounded-2xl font-black text-xs transition-all flex items-center justify-center gap-2"
+                >
+                  <span className="text-base">&#9889;</span>
+                  신규 분류 규칙 {newRuleCandidates.filter((c) => !c.confirmed).length}건 확인 필요
+                </button>
+              )}
 
               {/* 다운로드 */}
               <button
@@ -611,6 +986,173 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
           )}
         </div>
       </div>
+
+      {/* 신규 규칙 확인 모달 */}
+      {showNewRuleModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="bg-violet-600 p-5 text-white">
+              <h2 className="text-lg font-black">신규 분류 규칙 확인</h2>
+              <p className="text-violet-200 text-xs font-bold mt-1">
+                AI가 새로운 거래처 유형을 발견했습니다. 확정하면 노션 DB에 자동 추가됩니다.
+              </p>
+            </div>
+
+            <div className="overflow-y-auto flex-1 p-4 space-y-3">
+              {newRuleCandidates.map((candidate, idx) => (
+                <div
+                  key={idx}
+                  className={`border rounded-2xl p-4 space-y-2 ${
+                    candidate.confirmed
+                      ? "bg-green-50 border-green-200"
+                      : "bg-white border-slate-200"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-black text-slate-700">
+                      {candidate.aiResult.tradeName}
+                    </span>
+                    {candidate.confirmed && (
+                      <span className="text-[10px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
+                        &#10003; 노션 저장 완료
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-[10px] text-slate-400 font-bold">
+                    AI 판단: {candidate.aiResult.reasoning}
+                  </p>
+
+                  {!candidate.confirmed && (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 block mb-1">
+                            계정과목 코드
+                          </label>
+                          <input
+                            type="text"
+                            value={candidate.editCode}
+                            onChange={(e) =>
+                              setNewRuleCandidates((prev) =>
+                                prev.map((c, j) =>
+                                  j === idx ? { ...c, editCode: e.target.value } : c
+                                )
+                              )
+                            }
+                            className="w-full border rounded-lg px-2 py-1.5 text-xs font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 block mb-1">
+                            계정과목명
+                          </label>
+                          <input
+                            type="text"
+                            value={candidate.editName}
+                            onChange={(e) =>
+                              setNewRuleCandidates((prev) =>
+                                prev.map((c, j) =>
+                                  j === idx ? { ...c, editName: e.target.value } : c
+                                )
+                              )
+                            }
+                            className="w-full border rounded-lg px-2 py-1.5 text-xs font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 block mb-1">
+                            태그
+                          </label>
+                          <select
+                            value={candidate.editTag}
+                            onChange={(e) =>
+                              setNewRuleCandidates((prev) =>
+                                prev.map((c, j) =>
+                                  j === idx ? { ...c, editTag: e.target.value } : c
+                                )
+                              )
+                            }
+                            className="w-full border rounded-lg px-2 py-1.5 text-xs font-bold"
+                          >
+                            <option value="매입">매입</option>
+                            <option value="일반">일반</option>
+                            <option value="전송제외">전송제외</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 block mb-1">
+                            거래처 예시 (노션 등록용)
+                          </label>
+                          <input
+                            type="text"
+                            value={candidate.editExample}
+                            onChange={(e) =>
+                              setNewRuleCandidates((prev) =>
+                                prev.map((c, j) =>
+                                  j === idx ? { ...c, editExample: e.target.value } : c
+                                )
+                              )
+                            }
+                            className="w-full border rounded-lg px-2 py-1.5 text-xs font-bold"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-1">
+                          특이사항 (선택)
+                        </label>
+                        <input
+                          type="text"
+                          value={candidate.editNote}
+                          onChange={(e) =>
+                            setNewRuleCandidates((prev) =>
+                              prev.map((c, j) =>
+                                j === idx ? { ...c, editNote: e.target.value } : c
+                              )
+                            )
+                          }
+                          placeholder="조건이나 예외사항 메모"
+                          className="w-full border rounded-lg px-2 py-1.5 text-xs"
+                        />
+                      </div>
+
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => saveNewRule(candidate)}
+                          disabled={savingRule}
+                          className="flex-1 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-xs font-black transition-all disabled:opacity-50"
+                        >
+                          {savingRule ? "저장 중..." : "&#10003; 확정 (노션 저장)"}
+                        </button>
+                        <button
+                          onClick={() =>
+                            setNewRuleCandidates((prev) =>
+                              prev.filter((_, j) => j !== idx)
+                            )
+                          }
+                          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all"
+                        >
+                          건너뛰기
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="p-4 border-t">
+              <button
+                onClick={() => setShowNewRuleModal(false)}
+                className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-black text-xs transition-all"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

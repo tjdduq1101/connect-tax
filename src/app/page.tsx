@@ -4,6 +4,7 @@ import taxData from './data/taxData.json';
 import BusinessLookup from './components/BusinessLookup';
 import AccountRecommend from './components/AccountRecommend';
 import CashReceiptClassifier from './components/CashReceiptClassifier';
+import DbUpload from './components/DbUpload';
 
 // --- [공통 함수] ---
 const format = (n: number) => Math.floor(n).toLocaleString();
@@ -127,8 +128,8 @@ function FreelancerCalc({ onBack }: { onBack: () => void }) {
   const [mode, setMode] = useState<'before' | 'after'>('before');
   const [inputValue, setInputValue] = useState('');
   const [bulkMode, setBulkMode] = useState<'before' | 'after'>('before');
-  const [rawData, setRawData] = useState('');
-  const [bulkResults, setBulkResults] = useState<{ before: number; incomeTax: number; localTax: number; totalTax: number; after: number }[]>([]);
+  const [bulkEntries, setBulkEntries] = useState([{ name: '', amount: '' }]);
+  const [bulkResults, setBulkResults] = useState<{ name: string; before: number; incomeTax: number; localTax: number; totalTax: number; after: number }[]>([]);
 
   const calculateTaxes = (beforeAmt: number) => {
     const incomeTax = Math.floor((beforeAmt * 0.03) / 10) * 10;
@@ -147,13 +148,28 @@ function FreelancerCalc({ onBack }: { onBack: () => void }) {
     return estimate;
   };
 
+  const addBulkEntry = () => setBulkEntries(prev => [...prev, { name: '', amount: '' }]);
+  const removeBulkEntry = (idx: number) => { if (bulkEntries.length > 1) setBulkEntries(prev => prev.filter((_, i) => i !== idx)); };
+  const updateBulkEntry = (idx: number, field: 'name' | 'amount', value: string) => {
+    setBulkEntries(prev => {
+      const updated = prev.map((e, i) => i === idx ? { ...e, [field]: field === 'amount' ? formatInput(value) : value } : e);
+      const last = updated[updated.length - 1];
+      if (idx === updated.length - 1 && last.name.trim() !== '' && last.amount.trim() !== '') {
+        return [...updated, { name: '', amount: '' }];
+      }
+      return updated;
+    });
+    setBulkResults([]);
+  };
+
   const handleBulkCalculate = () => {
-    const lines = rawData.split('\n').filter(l => l.trim() !== '');
-    setBulkResults(lines.map(line => {
-      const num = Number(line.replace(/[^0-9]/g, '')) || 0;
+    const valid = bulkEntries.filter(e => e.amount.trim() !== '');
+    if (valid.length === 0) { alert("금액을 입력해주세요."); return; }
+    setBulkResults(valid.map(e => {
+      const num = parseNum(e.amount);
       const before = bulkMode === 'before' ? num : findGoalSeekBefore(num);
       const res = calculateTaxes(before);
-      return { ...res, after: bulkMode === 'before' ? res.after : num };
+      return { name: e.name, ...res, after: bulkMode === 'before' ? res.after : num };
     }));
   };
 
@@ -202,23 +218,57 @@ function FreelancerCalc({ onBack }: { onBack: () => void }) {
                 {(['before', 'after'] as const).map(m => (
                   <button key={m} onClick={() => { setBulkMode(m); setBulkResults([]); }}
                     className={`flex-1 py-3 rounded-xl border-2 text-sm font-bold transition-all ${bulkMode === m ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-100 text-slate-400'}`}>
-                    {m === 'before' ? '세전 리스트 입력' : '실수령 리스트 입력'}
+                    {m === 'before' ? '세전 입력' : '실수령 역산'}
                   </button>
                 ))}
               </div>
-              <textarea rows={8} value={rawData} onChange={(e) => setRawData(e.target.value)} placeholder="숫자들을 줄바꿈으로 구분해 붙여넣으세요."
-                className="w-full p-5 bg-slate-50 border-none rounded-2xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-400" />
+              <div className="space-y-2">
+                <div className="grid grid-cols-[1fr_1fr_auto] gap-2 px-1">
+                  <span className="text-[10px] font-bold text-slate-400 ml-1">이름</span>
+                  <span className="text-[10px] font-bold text-slate-400 ml-1">{bulkMode === 'before' ? '세전 금액' : '실수령액'}</span>
+                  <span />
+                </div>
+                {bulkEntries.map((entry, idx) => (
+                  <div key={idx} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                    <input
+                      type="text"
+                      value={entry.name}
+                      onChange={(e) => updateBulkEntry(idx, 'name', e.target.value)}
+                      placeholder="홍길동"
+                      className="p-3 bg-slate-50 border-none rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-400"
+                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={entry.amount}
+                        onChange={(e) => updateBulkEntry(idx, 'amount', e.target.value)}
+                        placeholder="0"
+                        className="w-full p-3 pr-8 bg-slate-50 border-none rounded-xl text-sm font-bold text-right outline-none focus:ring-2 focus:ring-blue-400"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-300">원</span>
+                    </div>
+                    <button onClick={() => removeBulkEntry(idx)} className={`w-8 h-8 flex items-center justify-center rounded-lg text-sm font-bold transition-colors ${bulkEntries.length > 1 ? 'text-slate-300 hover:text-rose-400' : 'text-slate-100 cursor-default'}`}>✕</button>
+                  </div>
+                ))}
+                <button onClick={addBulkEntry} className="w-full py-2.5 border-2 border-dashed border-slate-200 rounded-xl text-sm font-bold text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-all">+ 행 추가</button>
+              </div>
               <button onClick={handleBulkCalculate} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-lg shadow-lg active:scale-95 transition-transform">일괄 계산하기</button>
               {bulkResults.length > 0 && (
-                <div className="mt-4 border rounded-2xl overflow-hidden overflow-x-auto">
+                <div className="mt-4 border rounded-2xl overflow-hidden overflow-x-auto animate-in slide-in-from-bottom-2 duration-300">
                   <table className="w-full text-sm text-right">
                     <thead className="bg-slate-50 text-slate-400 font-bold uppercase text-[10px]">
-                      <tr><th className="p-4 text-center">No</th><th className="p-4">세전금액</th><th className="p-4 text-rose-400">소득세</th><th className="p-4 text-rose-400">지방세</th><th className="p-4 text-blue-600">실수령액</th></tr>
+                      <tr>
+                        <th className="p-4 text-left">이름</th>
+                        <th className="p-4">세전금액</th>
+                        <th className="p-4 text-rose-400">소득세</th>
+                        <th className="p-4 text-rose-400">지방세</th>
+                        <th className="p-4 text-blue-600">실수령액</th>
+                      </tr>
                     </thead>
                     <tbody className="font-bold text-slate-700">
                       {bulkResults.map((res, i) => (
-                        <tr key={i} className="border-t border-slate-50">
-                          <td className="p-4 text-center text-slate-300">{i + 1}</td>
+                        <tr key={i} className="border-t border-slate-100">
+                          <td className="p-4 text-left text-slate-600">{res.name || '-'}</td>
                           <td className="p-4">{format(res.before)}원</td>
                           <td className="p-4 text-rose-300">{format(res.incomeTax)}원</td>
                           <td className="p-4 text-rose-300">{format(res.localTax)}원</td>
@@ -608,7 +658,7 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
 // =============================================
 // 메인 페이지
 // =============================================
-type TabKey = 'home' | 'regularSalary' | 'salary' | 'freelancer' | 'wageAllowance' | 'businessLookup' | 'accountRecommend' | 'cashReceiptClassifier';
+type TabKey = 'home' | 'regularSalary' | 'salary' | 'freelancer' | 'wageAllowance' | 'dbUpload' | 'businessLookup' | 'accountRecommend' | 'cashReceiptClassifier';
 type CategoryKey = 'home' | 'labor' | 'tax';
 
 const menuGroups: { category: CategoryKey; label: string; color: string; items: { key: TabKey; icon: string; title: string; desc: string }[] }[] = [
@@ -628,7 +678,8 @@ const menuGroups: { category: CategoryKey; label: string; color: string; items: 
     label: '세무 관리',
     color: '#7C3AED',
     items: [
-      { key: 'businessLookup', icon: '\uD83D\uDD0D', title: '사업자 조회', desc: '사업자등록번호 조회 및 엑셀 DB 연동' },
+      { key: 'dbUpload', icon: '\uD83D\uDDC4\uFE0F', title: '거래처 DB 관리', desc: '사업자 정보 엑셀 업로드 및 DB 구축' },
+      { key: 'businessLookup', icon: '\uD83D\uDD0D', title: '사업자 조회', desc: '사업자등록번호 조회 및 업종 분류' },
       { key: 'accountRecommend', icon: '\uD83D\uDCCB', title: '카드전표 계정과목 분류', desc: '카드매입 엑셀 자동 분류 및 SmartA10 변환' },
       { key: 'cashReceiptClassifier', icon: '\uD83E\uDDFE', title: '현금영수증 계정과목 분류', desc: '현금영수증 매입 엑셀 업종 조회 및 자동 분류' },
     ],
@@ -707,6 +758,7 @@ export default function MainPage() {
       {activeTab === 'salary' && <SalaryCalc onBack={goHome} />}
       {activeTab === 'freelancer' && <FreelancerCalc onBack={goHome} />}
       {activeTab === 'wageAllowance' && <WageAndAllowanceCalc onBack={goHome} />}
+      {activeTab === 'dbUpload' && <DbUpload onBack={goHome} />}
       {activeTab === 'businessLookup' && <BusinessLookup onBack={goHome} />}
       {activeTab === 'accountRecommend' && <AccountRecommend onBack={goHome} />}
       {activeTab === 'cashReceiptClassifier' && <CashReceiptClassifier onBack={goHome} />}

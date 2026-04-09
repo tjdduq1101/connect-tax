@@ -337,7 +337,6 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [dbCount, setDbCount] = useState(0);
-  const [showUpload, setShowUpload] = useState(false);
   const [manualName, setManualName] = useState('');
 
   useEffect(() => {
@@ -362,7 +361,15 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
       }
       // 2순위: 국세청 공공데이터 API
       const nts = await fetchBusinessStatus(input);
-      if (nts) { setResult(nts); setResultSource('api'); return; }
+      if (nts) {
+        setResult(nts); setResultSource('api');
+        // NTS 결과에 상호명이 있으면 네이버 검색 자동 실행
+        if (nts.b_nm) {
+          setNaverLoading(true);
+          searchNaver(nts.b_nm).then((items) => setNaverInfo(items)).catch(() => {}).finally(() => setNaverLoading(false));
+        }
+        return;
+      }
       setError('해당 사업자번호로 등록된 정보가 없습니다.');
     } catch {
       setError('조회 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
@@ -371,8 +378,15 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
 
   const handleNameSearch = async () => {
     const name = manualName.trim();
-    if (!name || !result) return;
-    setResult({ ...result, b_nm: name });
+    if (!name) return;
+    // result가 없으면 (DB+NTS 모두 실패) 최소한의 결과 객체 생성
+    if (!result) {
+      setResult({ b_no: input.replace(/-/g, ''), b_nm: name } as BusinessData);
+      setResultSource('api');
+    } else {
+      setResult({ ...result, b_nm: name });
+    }
+    setError('');
     setNaverLoading(true);
     try {
       const items = await searchNaver(name);
@@ -407,15 +421,12 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
         </div>
 
         <div className="p-6 space-y-5">
-          {/* DB toggle */}
-          <button
-            onClick={() => setShowUpload((v) => !v)}
-            className={`w-full py-2 px-4 rounded-xl text-xs font-bold transition-all ${showUpload ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-          >
-            📂 엑셀 DB 업로드 {dbCount > 0 ? `(${dbCount.toLocaleString()}개 저장됨)` : ''}
-          </button>
-
-          {showUpload && <UploadPanel onDbUpdate={setDbCount} />}
+          {/* DB 현황 표시 */}
+          {dbCount > 0 && (
+            <div className="bg-slate-50 rounded-xl px-4 py-2 text-[11px] font-bold text-slate-400 text-center">
+              🗂 저장된 거래처 {dbCount.toLocaleString()}개
+            </div>
+          )}
 
           {/* Search */}
           <div>
@@ -438,7 +449,31 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
                 {loading ? <span className="spinner" /> : '조회'}
               </button>
             </div>
-            {error && <p className="text-red-500 text-xs font-bold mt-2">⚠️ {error}</p>}
+            {error && (
+              <div className="mt-2 space-y-2">
+                <p className="text-red-500 text-xs font-bold">⚠️ {error}</p>
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                  <p className="text-[11px] text-blue-700 font-bold mb-2">💡 상호명을 직접 입력하면 네이버에서 검색합니다</p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      className="flex-1 p-2 bg-white border border-blue-200 rounded-lg text-sm font-bold outline-none focus:ring-2 focus:ring-blue-400 transition-all"
+                      placeholder="예: 쿠팡, 네이버 등"
+                      value={manualName}
+                      onChange={(e) => setManualName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleNameSearch()}
+                    />
+                    <button
+                      onClick={handleNameSearch}
+                      disabled={!manualName.trim()}
+                      className="px-4 bg-green-500 hover:bg-green-600 disabled:bg-slate-300 text-white rounded-lg font-bold text-sm transition-all active:scale-95"
+                    >
+                      검색
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Result */}

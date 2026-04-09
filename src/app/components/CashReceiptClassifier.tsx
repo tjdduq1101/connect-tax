@@ -44,12 +44,19 @@ interface BusinessInfo {
   source: "db" | "naver" | "";
 }
 
+interface ManualOverride {
+  code: string;
+  name: string;
+  tag: string;
+}
+
 interface ClassifiedCashRow {
   input: CashReceiptRow;
   result: ClassificationResult;
   bizInfo: BusinessInfo;
   original차변: string;
   changed: boolean;
+  manualOverride?: ManualOverride;
 }
 
 // ============================================================
@@ -67,6 +74,86 @@ const BUSINESS_TYPE_OPTIONS = [
   { value: "건설업", label: "건설업" },
   { value: "제조업", label: "제조업" },
 ];
+
+// 코드 → 계정과목명 매핑 (530/630/730 포함)
+const CODE_TO_ACCOUNT: Record<string, { name: string; tag: string }> = {
+  "530": { name: "소모품비", tag: "매입" },
+  "630": { name: "소모품비", tag: "매입" },
+  "730": { name: "소모품비", tag: "매입" },
+  "801": { name: "임원급여", tag: "" },
+  "802": { name: "직원급여", tag: "" },
+  "803": { name: "상여금", tag: "" },
+  "811": { name: "복리후생비", tag: "매입" },
+  "812": { name: "여비교통비", tag: "매입" },
+  "813": { name: "접대비", tag: "일반" },
+  "814": { name: "통신비", tag: "매입" },
+  "815": { name: "수도광열비", tag: "매입" },
+  "816": { name: "전력비", tag: "매입" },
+  "817": { name: "세금과공과금", tag: "일반" },
+  "818": { name: "감가상각비", tag: "일반" },
+  "819": { name: "지급임차료", tag: "매입" },
+  "820": { name: "수선비", tag: "매입" },
+  "821": { name: "보험료", tag: "일반" },
+  "822": { name: "차량유지비", tag: "매입" },
+  "823": { name: "경상연구개발비", tag: "매입" },
+  "824": { name: "운반비", tag: "매입" },
+  "825": { name: "교육훈련비", tag: "매입" },
+  "826": { name: "도서인쇄비", tag: "매입" },
+  "827": { name: "회의비", tag: "매입" },
+  "828": { name: "포장비", tag: "매입" },
+  "829": { name: "사무용품비", tag: "매입" },
+  "830": { name: "소모품비", tag: "매입" },
+  "831": { name: "지급수수료", tag: "매입" },
+  "832": { name: "보관료", tag: "매입" },
+  "833": { name: "광고선전비", tag: "매입" },
+  "834": { name: "판매촉진비", tag: "매입" },
+  "835": { name: "대손상각비", tag: "일반" },
+  "837": { name: "건물관리비", tag: "매입" },
+};
+
+// 계정과목명 → 코드 매핑 (소모품비 제외 — 피커로 처리)
+const NAME_TO_CODE: Record<string, string> = {
+  "복리후생비": "811", "여비교통비": "812", "접대비": "813",
+  "통신비": "814", "수도광열비": "815", "전력비": "816",
+  "세금과공과금": "817", "감가상각비": "818", "지급임차료": "819",
+  "수선비": "820", "보험료": "821", "차량유지비": "822",
+  "경상연구개발비": "823", "운반비": "824", "교육훈련비": "825",
+  "도서인쇄비": "826", "회의비": "827", "포장비": "828",
+  "사무용품비": "829", "지급수수료": "831", "보관료": "832",
+  "광고선전비": "833", "판매촉진비": "834", "대손상각비": "835",
+  "건물관리비": "837", "임원급여": "801", "직원급여": "802",
+  "상여금": "803",
+};
+
+// 소모품 코드 보기
+const SOMOUM_CODES = [
+  { code: "530", desc: "제조원가" },
+  { code: "630", desc: "공사원가" },
+  { code: "730", desc: "기타원가" },
+  { code: "830", desc: "판관비(일반)" },
+];
+
+// 입력값 파싱: 코드(숫자) or 계정과목명
+function resolveAccountInput(input: string): { code: string; name: string; needsSomoumPicker: boolean } | null {
+  const v = input.trim();
+  if (/^\d{3}$/.test(v)) {
+    const found = CODE_TO_ACCOUNT[v];
+    if (found) return { code: v, name: found.name, needsSomoumPicker: false };
+  }
+  if (v.includes("소모품")) {
+    return { code: "", name: "소모품비", needsSomoumPicker: true };
+  }
+  const code = NAME_TO_CODE[v];
+  if (code) return { code, name: v, needsSomoumPicker: false };
+  return null;
+}
+
+function getEffectiveResult(c: ClassifiedCashRow): ClassificationResult {
+  if (c.manualOverride) {
+    return { ...c.result, code: c.manualOverride.code, name: c.manualOverride.name, tag: c.manualOverride.tag };
+  }
+  return c.result;
+}
 
 // ============================================================
 // Helpers
@@ -274,11 +361,13 @@ function buildOutputWorkbook(classified: ClassifiedCashRow[]): XLSX.WorkBook {
     CASH_RECEIPT_HEADERS,
   ];
 
-  for (const { input, result } of classified) {
-    const debitName = result.tag === "전송제외"
+  for (const row of classified) {
+    const { input, result, manualOverride } = row;
+    const eff = manualOverride ? { ...result, ...manualOverride } : result;
+    const debitName = eff.tag === "전송제외"
       ? ""
-      : result.name
-        ? `(판)${result.name.replace("(기업업무추진비)", "")}`
+      : eff.name
+        ? `(판)${eff.name.replace("(기업업무추진비)", "")}`
         : input.차변계정;
 
     outputRows.push([
@@ -333,6 +422,14 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [filter, setFilter] = useState<"all" | "changed" | "review" | "exclude">("all");
+
+  // 정렬
+  const [sortConfig, setSortConfig] = useState<{ field: "code" | "name"; dir: "asc" | "desc" } | null>(null);
+
+  // 인라인 편집
+  const [editingCell, setEditingCell] = useState<{ origIdx: number; field: "account" | "tag" } | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [somoumPicker, setSomoumPicker] = useState<number | null>(null); // origIdx
 
   // 업종 조회 캐시 (거래처명 → BusinessInfo)
   const bizCacheRef = useRef<Map<string, BusinessInfo>>(new Map());
@@ -426,15 +523,67 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
   const lowCount = classified.filter((c) => c.result.confidence === "low").length;
   const excludeCount = classified.filter((c) => c.result.tag === "전송제외").length;
 
-  const filteredRows = classified.filter((c) => {
-    if (filter === "changed") return c.changed;
-    if (filter === "review") return c.result.confidence === "low";
-    if (filter === "exclude") return c.result.tag === "전송제외";
-    return true;
-  });
+  const filteredRows = (() => {
+    let rows = classified.filter((c) => {
+      const eff = getEffectiveResult(c);
+      if (filter === "changed") return c.changed || !!c.manualOverride;
+      if (filter === "review") return c.result.confidence === "low" && !c.manualOverride;
+      if (filter === "exclude") return eff.tag === "전송제외";
+      return true;
+    });
+    if (sortConfig) {
+      rows = [...rows].sort((a, b) => {
+        const va = getEffectiveResult(a)[sortConfig.field === "code" ? "code" : "name"] || "";
+        const vb = getEffectiveResult(b)[sortConfig.field === "code" ? "code" : "name"] || "";
+        const cmp = va.localeCompare(vb, "ko");
+        return sortConfig.dir === "asc" ? cmp : -cmp;
+      });
+    }
+    return rows;
+  })();
+
+  // 정렬 토글
+  const toggleSort = (field: "code" | "name") => {
+    setSortConfig((prev) => {
+      if (!prev || prev.field !== field) return { field, dir: "asc" };
+      if (prev.dir === "asc") return { field, dir: "desc" };
+      return null;
+    });
+  };
+
+  // 계정과목 편집 확정
+  const commitAccountEdit = (origIdx: number, value: string) => {
+    const parsed = resolveAccountInput(value);
+    if (!parsed) { setEditingCell(null); setSomoumPicker(null); return; }
+    if (parsed.needsSomoumPicker) { setSomoumPicker(origIdx); return; }
+    applyOverride(origIdx, parsed.code, parsed.name);
+  };
+
+  // 소모품 코드 선택
+  const applyOverride = (origIdx: number, code: string, name: string) => {
+    const defaultTag = CODE_TO_ACCOUNT[code]?.tag ?? "매입";
+    setClassified((prev) => prev.map((c, i) => {
+      if (i !== origIdx) return c;
+      const currentTag = c.manualOverride?.tag ?? c.result.tag;
+      return { ...c, manualOverride: { code, name, tag: currentTag || defaultTag }, changed: true };
+    }));
+    setEditingCell(null);
+    setSomoumPicker(null);
+    setEditValue("");
+  };
+
+  // 태그(구분) 편집
+  const applyTagOverride = (origIdx: number, tag: string) => {
+    setClassified((prev) => prev.map((c, i) => {
+      if (i !== origIdx) return c;
+      const eff = getEffectiveResult(c);
+      return { ...c, manualOverride: { code: eff.code, name: eff.name, tag }, changed: true };
+    }));
+    setEditingCell(null);
+  };
 
   return (
-    <div className="w-full max-w-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="w-full max-w-5xl animate-in fade-in slide-in-from-bottom-4 duration-500">
       <button
         onClick={onBack}
         className="mb-4 text-slate-400 hover:text-blue-600 text-sm font-bold flex items-center gap-1 transition-colors"
@@ -611,7 +760,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
 
               {/* 테이블 */}
               <div className="border rounded-2xl overflow-hidden">
-                <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                   <table className="w-full text-xs">
                     <thead className="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase sticky top-0 z-10">
                       <tr>
@@ -621,39 +770,61 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                         <th className="p-2 text-right">합계</th>
                         <th className="p-2 text-left">기존 차변</th>
                         <th className="p-2 text-center">→</th>
-                        <th className="p-2 text-left">분류 결과</th>
-                        <th className="p-2 text-center">태그</th>
+                        <th
+                          className="p-2 text-left cursor-pointer select-none hover:text-blue-500 transition-colors"
+                          onClick={() => toggleSort("code")}
+                        >
+                          분류결과{" "}
+                          {sortConfig?.field === "code"
+                            ? sortConfig.dir === "asc" ? "▲" : "▼"
+                            : <span className="opacity-30">⇅</span>}
+                        </th>
+                        <th
+                          className="p-2 text-center cursor-pointer select-none hover:text-blue-500 transition-colors"
+                          onClick={() => toggleSort("name")}
+                        >
+                          구분{" "}
+                          {sortConfig?.field === "name"
+                            ? sortConfig.dir === "asc" ? "▲" : "▼"
+                            : <span className="opacity-30">⇅</span>}
+                        </th>
                         <th className="p-2 text-left">업종(DB/네이버)</th>
                       </tr>
                     </thead>
                     <tbody className="font-bold text-slate-700">
                       {filteredRows.map((c, i) => {
-                        const isLow = c.result.confidence === "low";
-                        const isExclude = c.result.tag === "전송제외";
+                        const origIdx = classified.indexOf(c);
+                        const eff = getEffectiveResult(c);
+                        const isLow = c.result.confidence === "low" && !c.manualOverride;
+                        const isExclude = eff.tag === "전송제외";
                         const rowBg = isLow
                           ? "bg-red-50"
-                          : c.changed
+                          : (c.changed || c.manualOverride)
                           ? "bg-orange-50"
                           : isExclude
                           ? "bg-slate-50"
                           : "";
                         const tagColor =
-                          c.result.tag === "매입" ? "bg-purple-100 text-purple-700"
-                          : c.result.tag === "일반" ? "bg-slate-100 text-slate-600"
-                          : c.result.tag === "전송제외" ? "bg-red-100 text-red-600"
+                          eff.tag === "매입" ? "bg-purple-100 text-purple-700"
+                          : eff.tag === "일반" ? "bg-slate-100 text-slate-600"
+                          : eff.tag === "전송제외" ? "bg-red-100 text-red-600"
                           : "bg-slate-100 text-slate-500";
-                        const confIcon =
-                          c.result.confidence === "high" ? "●"
+                        const confIcon = c.manualOverride ? "✎"
+                          : c.result.confidence === "high" ? "●"
                           : c.result.confidence === "medium" ? "◐"
                           : "○";
-                        const confColor =
-                          c.result.confidence === "high" ? "text-green-500"
+                        const confColor = c.manualOverride ? "text-blue-500"
+                          : c.result.confidence === "high" ? "text-green-500"
                           : c.result.confidence === "medium" ? "text-amber-500"
                           : "text-red-500";
 
+                        const isEditingAccount = editingCell?.origIdx === origIdx && editingCell?.field === "account";
+                        const isEditingTag = editingCell?.origIdx === origIdx && editingCell?.field === "tag";
+                        const isShowingSomoum = somoumPicker === origIdx;
+
                         return (
                           <tr key={i} className={`border-t border-slate-50 ${rowBg}`}>
-                            <td className="p-2 text-slate-300">{classified.indexOf(c) + 1}</td>
+                            <td className="p-2 text-slate-300">{origIdx + 1}</td>
                             <td className="p-2 text-slate-500 whitespace-nowrap">{c.input.일자}</td>
                             <td className="p-2 max-w-[140px] truncate">{c.input.거래처}</td>
                             <td className="p-2 text-right text-slate-500 whitespace-nowrap">
@@ -663,27 +834,112 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                               {c.original차변 || "-"}
                             </td>
                             <td className="p-2 text-center">
-                              {c.changed ? (
+                              {(c.changed || c.manualOverride) ? (
                                 <span className="text-orange-500 font-black">→</span>
                               ) : (
                                 <span className="text-green-400">=</span>
                               )}
                             </td>
-                            <td className="p-2">
-                              <span className={confColor}>{confIcon}</span>{" "}
-                              {c.result.code ? `${c.result.code} ` : ""}
-                              {c.result.name || "-"}
-                              {c.result.note && (
-                                <span className="block text-[9px] text-slate-400 font-normal truncate max-w-[120px]">
-                                  {c.result.note}
-                                </span>
+                            {/* 계정과목 편집 셀 */}
+                            <td className="p-2 relative">
+                              {isEditingAccount ? (
+                                <div className="flex flex-col gap-1">
+                                  <input
+                                    autoFocus
+                                    value={editValue}
+                                    onChange={(e) => setEditValue(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") commitAccountEdit(origIdx, editValue);
+                                      if (e.key === "Escape") { setEditingCell(null); setSomoumPicker(null); }
+                                    }}
+                                    placeholder="코드(830) 또는 계정과목명"
+                                    className="w-full px-2 py-1 border border-blue-400 rounded text-[10px] font-bold outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+                                  />
+                                  {isShowingSomoum && (
+                                    <div className="absolute top-full left-0 z-20 bg-white border border-blue-200 rounded-xl shadow-lg p-2 flex gap-1 flex-wrap">
+                                      <p className="w-full text-[9px] text-slate-400 font-bold mb-1">소모품비 코드 선택:</p>
+                                      {SOMOUM_CODES.map(({ code, desc }) => (
+                                        <button
+                                          key={code}
+                                          onClick={() => applyOverride(origIdx, code, "소모품비")}
+                                          className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[10px] font-black transition-colors"
+                                        >
+                                          {code} <span className="font-normal text-slate-500">{desc}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={() => commitAccountEdit(origIdx, editValue)}
+                                      className="flex-1 px-1 py-0.5 bg-blue-500 text-white rounded text-[9px] font-bold"
+                                    >확인</button>
+                                    <button
+                                      onClick={() => { setEditingCell(null); setSomoumPicker(null); setEditValue(""); }}
+                                      className="flex-1 px-1 py-0.5 bg-slate-200 text-slate-600 rounded text-[9px] font-bold"
+                                    >취소</button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setEditingCell({ origIdx, field: "account" });
+                                    setEditValue("");
+                                    setSomoumPicker(null);
+                                  }}
+                                  className="w-full text-left group"
+                                >
+                                  <span className={confColor}>{confIcon}</span>{" "}
+                                  {eff.code ? `${eff.code} ` : ""}
+                                  {eff.name || "-"}
+                                  {c.manualOverride && (
+                                    <span className="ml-1 text-[8px] text-blue-400 font-bold">[수기]</span>
+                                  )}
+                                  <span className="ml-1 text-[8px] text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">✎</span>
+                                  {!c.manualOverride && c.result.note && (
+                                    <span className="block text-[9px] text-slate-400 font-normal truncate max-w-[120px]">
+                                      {c.result.note}
+                                    </span>
+                                  )}
+                                </button>
                               )}
                             </td>
-                            <td className="p-2 text-center">
-                              {c.result.tag && (
-                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${tagColor}`}>
-                                  {c.result.tag}
-                                </span>
+                            {/* 구분(태그) 편집 셀 */}
+                            <td className="p-2 text-center relative">
+                              {isEditingTag ? (
+                                <div className="absolute top-0 left-1/2 -translate-x-1/2 z-20 bg-white border border-blue-200 rounded-xl shadow-lg p-1 flex flex-col gap-0.5 min-w-[80px]">
+                                  {["매입", "일반", "전송제외"].map((tag) => (
+                                    <button
+                                      key={tag}
+                                      onClick={() => applyTagOverride(origIdx, tag)}
+                                      className={`px-2 py-1 rounded text-[10px] font-bold text-left transition-colors ${
+                                        tag === "매입" ? "hover:bg-purple-100 text-purple-700"
+                                        : tag === "일반" ? "hover:bg-slate-100 text-slate-600"
+                                        : "hover:bg-red-100 text-red-600"
+                                      }`}
+                                    >{tag}</button>
+                                  ))}
+                                  <button
+                                    onClick={() => setEditingCell(null)}
+                                    className="px-2 py-0.5 text-[9px] text-slate-400 hover:text-slate-600"
+                                  >취소</button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => { setEditingCell({ origIdx, field: "tag" }); setSomoumPicker(null); }}
+                                  className="group"
+                                >
+                                  {eff.tag ? (
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${tagColor} group-hover:opacity-80 transition-opacity`}>
+                                      {eff.tag}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-300 text-[9px]">-</span>
+                                  )}
+                                  {c.manualOverride?.tag && (
+                                    <span className="ml-0.5 text-[7px] text-blue-400">[수]</span>
+                                  )}
+                                </button>
                               )}
                             </td>
                             <td className="p-2 text-[10px] text-slate-400 max-w-[100px] truncate">
@@ -702,6 +958,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                 <span className="flex items-center gap-1"><span className="text-green-500">●</span> PDF규칙</span>
                 <span className="flex items-center gap-1"><span className="text-amber-500">◐</span> 카테고리추정</span>
                 <span className="flex items-center gap-1"><span className="text-red-500">○</span> 미분류</span>
+                <span className="flex items-center gap-1"><span className="text-blue-500">✎</span> 수기변경</span>
                 <span className="flex items-center gap-1"><span className="text-orange-500 font-black">→</span> 변경됨</span>
                 <span className="flex items-center gap-1"><span className="text-green-400">=</span> 유지</span>
               </div>

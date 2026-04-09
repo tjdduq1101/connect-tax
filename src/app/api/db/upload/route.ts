@@ -64,16 +64,20 @@ export async function POST(request: NextRequest) {
           updated_at: new Date().toISOString(),
         };
 
-        const existingName = existingMap[b.b_no];
-        const newName = b.b_nm;
+        // 합성키(상호명 기반)는 네이버 충돌 검사 불필요
+        const isSyntheticKey = b.b_no.startsWith("nm_");
+        if (!isSyntheticKey) {
+          const existingName = existingMap[b.b_no];
+          const newName = b.b_nm;
 
-        if (existingName && newName && existingName !== newName) {
-          const [newHit, existingHit] = await Promise.all([
-            searchNaverName(newName),
-            searchNaverName(existingName),
-          ]);
-          if (existingHit && !newHit) {
-            row.b_nm = existingName;
+          if (existingName && newName && existingName !== newName) {
+            const [newHit, existingHit] = await Promise.all([
+              searchNaverName(newName),
+              searchNaverName(existingName),
+            ]);
+            if (existingHit && !newHit) {
+              row.b_nm = existingName;
+            }
           }
         }
 
