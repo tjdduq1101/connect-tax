@@ -64,12 +64,12 @@ export const CATEGORY_RULES: { keywords: string[]; label: string; emoji: string;
   { keywords: ['호텔', '모텔', '펜션', '숙박', '게스트하우스', '민박', '리조트'], label: '숙박', emoji: '🏨', desc: '숙박업입니다', color: '#6A1B9A', bg: '#F3E5F5' },
 
   // 이커머스 (도매/소매보다 우선)
-  { keywords: ['이커머스', '전자상거래', '온라인쇼핑', '쿠팡', '11번가', 'G마켓', '옥션', '위메프', '티몬', 'coupang', 'SSG', '마켓컬리', '컬리', '오아시스'], label: '이커머스', emoji: '🛍️', desc: '이커머스/온라인유통업입니다', color: '#E65100', bg: '#FFF3E0' },
+  { keywords: ['이커머스', '전자상거래', '온라인쇼핑', '쿠팡', '11번가', '십일번가', 'G마켓', '지마켓', '옥션', '위메프', '티몬', 'coupang', 'SSG', '에스에스지', '쓱', '마켓컬리', '컬리', '오아시스'], label: '이커머스', emoji: '🛍️', desc: '이커머스/온라인유통업입니다', color: '#E65100', bg: '#FFF3E0' },
 
   // G: 도매 및 소매업
-  { keywords: ['편의점', 'GS25', 'CU', '씨유', '세븐일레븐', '이마트24', '미니스톱'], label: '편의점', emoji: '🏪', desc: '편의점입니다', color: '#2196F3', bg: '#E3F2FD' },
+  { keywords: ['편의점', 'GS25', '지에스25', 'CU', '씨유', '세븐일레븐', '이마트24', '미니스톱'], label: '편의점', emoji: '🏪', desc: '편의점입니다', color: '#2196F3', bg: '#E3F2FD' },
   { keywords: ['마트', '이마트', '홈플러스', '롯데마트', '슈퍼', '하나로', '농협마트'], label: '마트', emoji: '🛒', desc: '마트/슈퍼입니다', color: '#4CAF50', bg: '#E8F5E9' },
-  { keywords: ['주유', 'LPG', '가스충전', '충전소'], label: '주유소', emoji: '⛽', desc: '주유소입니다', color: '#FF9800', bg: '#FFF3E0' },
+  { keywords: ['주유', 'LPG', '엘피지', '가스충전', '충전소'], label: '주유소', emoji: '⛽', desc: '주유소입니다', color: '#FF9800', bg: '#FFF3E0' },
   { keywords: ['도매', '도매업', '무역', '수출', '수입', '상사', '트레이딩', '인터내셔날', '인터내셔널', '유통'], label: '도매/무역', emoji: '📦', desc: '도매/무역업입니다', color: '#0277BD', bg: '#E1F5FE' },
   { keywords: ['의류', '옷', '패션', '의복', '잡화', '백화점', '아울렛', '한섬'], label: '의류/패션', emoji: '👗', desc: '의류/패션업입니다', color: '#AD1457', bg: '#FCE4EC' },
   { keywords: ['꽃', '화훼', '플라워', '꽃집', '화원'], label: '화훼', emoji: '💐', desc: '꽃집/화훼업입니다', color: '#C62828', bg: '#FFEBEE' },
@@ -89,7 +89,7 @@ export const CATEGORY_RULES: { keywords: string[]; label: string; emoji: string;
   // S: 수리 및 기타 개인 서비스업
   { keywords: ['미용', '헤어', '네일', '에스테틱', '뷰티', '피부관리', '미용실'], label: '미용', emoji: '💇', desc: '미용업입니다', color: '#E91E63', bg: '#FCE4EC' },
   { keywords: ['세탁', '클리닝', '빨래', '드라이'], label: '세탁', emoji: '👔', desc: '세탁업입니다', color: '#1976D2', bg: '#E3F2FD' },
-  { keywords: ['수리', '수선', 'AS센터', '서비스센터'], label: '수리', emoji: '🔧', desc: '수리업입니다', color: '#616161', bg: '#F5F5F5' },
+  { keywords: ['수리', '수선', 'AS센터', '에이에스센터', '서비스센터'], label: '수리', emoji: '🔧', desc: '수리업입니다', color: '#616161', bg: '#F5F5F5' },
   { keywords: ['장례', '상조', '장의', '추모', '납골'], label: '장례', emoji: '🕯️', desc: '장례/상조업입니다', color: '#37474F', bg: '#ECEFF1' },
   { keywords: ['반려', '애견', '애완', '동물병원', '펫', '동물', '수의'], label: '반려동물', emoji: '🐾', desc: '반려동물관련업입니다', color: '#795548', bg: '#EFEBE9' },
 
@@ -104,8 +104,8 @@ export const CATEGORY_RULES: { keywords: string[]; label: string; emoji: string;
   { keywords: ['택시', '버스', '여객', '렌터카', '렌트카', '대리운전'], label: '여객운수', emoji: '🚕', desc: '여객운수업입니다', color: '#00838F', bg: '#E0F7FA' },
 
   // J: 정보통신업
-  { keywords: ['IT', '소프트웨어', '개발', '프로그램', '시스템', '데이터', '클라우드', '웹', '앱', '정보통신', '플랫폼', '인터넷', '포털', '네이버', '카카오', '라인', '배달의민족', '배민', '당근마켓', '당근', '토스', '야놀자', '직방', 'naver', 'kakao', 'toss', 'AI', '넥슨', '게임즈'], label: 'IT', emoji: '💻', desc: 'IT/소프트웨어업입니다', color: '#3F51B5', bg: '#E8EAF6' },
-  { keywords: ['통신', '방송', '미디어', '영상', '촬영', '사진', '스튜디오', 'SKT', 'KT', 'LGU'], label: '미디어', emoji: '🎬', desc: '미디어/통신업입니다', color: '#512DA8', bg: '#EDE7F6' },
+  { keywords: ['IT', '아이티', '소프트웨어', '개발', '프로그램', '시스템', '데이터', '클라우드', '웹', '앱', '정보통신', '플랫폼', '인터넷', '포털', '네이버', '카카오', '라인', '배달의민족', '배민', '당근마켓', '당근', '토스', '야놀자', '직방', 'naver', 'kakao', 'toss', 'AI', '에이아이', '넥슨', '게임즈'], label: 'IT', emoji: '💻', desc: 'IT/소프트웨어업입니다', color: '#3F51B5', bg: '#E8EAF6' },
+  { keywords: ['통신', '방송', '미디어', '영상', '촬영', '사진', '스튜디오', 'SKT', '에스케이티', '에스케이텔레콤', 'KT', '케이티', 'LGU', '엘지유플러스'], label: '미디어', emoji: '🎬', desc: '미디어/통신업입니다', color: '#512DA8', bg: '#EDE7F6' },
   { keywords: ['출판', '인쇄', '복사', '출력', '서적'], label: '출판/인쇄', emoji: '📰', desc: '출판/인쇄업입니다', color: '#424242', bg: '#F5F5F5' },
 
   // K: 금융 및 보험업
@@ -117,7 +117,8 @@ export const CATEGORY_RULES: { keywords: string[]; label: string; emoji: string;
 
   // R: 예술/스포츠/여가 서비스업
   { keywords: ['헬스', '피트니스', '체육', '스포츠', '골프', '수영', '요가', '필라테스', '태권도', '합기도', '무술', '체육관'], label: '스포츠', emoji: '🏋️', desc: '스포츠/체육시설입니다', color: '#E64A19', bg: '#FBE9E7' },
-  { keywords: ['노래방', '코인노래', 'PC방', '게임', '오락', '볼링', '당구', '탁구'], label: '오락/여가', emoji: '🎮', desc: '오락/여가시설입니다', color: '#7B1FA2', bg: '#F3E5F5' },
+  { keywords: ['노래방', '코인노래', 'PC방', '피씨방', '게임', '오락', '볼링', '당구', '탁구', '워터파크', '랜드', '테마파크', '놀이공원', '리조트'], label: '오락/여가', emoji: '🎮', desc: '오락/여가시설입니다', color: '#7B1FA2', bg: '#F3E5F5' },
+  { keywords: ['사우나', '목욕탕', '찜질방', '스파', '온천'], label: '사우나/목욕', emoji: '🛁', desc: '목욕/사우나업입니다', color: '#0288D1', bg: '#E1F5FE' },
   { keywords: ['여행', '관광', '투어', '여행사'], label: '여행', emoji: '✈️', desc: '여행업입니다', color: '#0097A7', bg: '#E0F7FA' },
 
   // N: 사업시설관리/사업지원/임대 서비스업
@@ -159,13 +160,13 @@ export const PDF_ACCOUNT_RULES: { keywords: string[]; code: string; name: string
   { keywords: ['약국', '올리브영'], code: '830', name: '소모품비', tag: '일반' },
 
   // 9. 편의점 (1만원 기준 분기)
-  { keywords: ['편의점', 'GS25', 'CU', '씨유', '세븐일레븐', '이마트24', '미니스톱'], code: '830', name: '소모품비', tag: '매입', note: '1만원 미만: 812 여비교통비 / 환급시 불공제' },
+  { keywords: ['편의점', 'GS25', '지에스25', 'CU', '씨유', '세븐일레븐', '이마트24', '미니스톱'], code: '830', name: '소모품비', tag: '매입', note: '1만원 미만: 812 여비교통비 / 환급시 불공제' },
 
   // 10. 교통 결제 (로카모빌리티, 티머니 등)
   { keywords: ['로카모빌리티', '마이비', '비씨카드', '카카오페이', '티머니', '스마트로'], code: '812', name: '여비교통비', tag: '일반' },
 
   // 11. 일반차량 주유비 (차량 미등록)
-  { keywords: ['주유소', 'SK에너지', 'GS칼텍스', 'S-OIL', '현대오일뱅크', 'LPG'], code: '812', name: '여비교통비', tag: '일반', note: '차량 등록시 822 차량유지비' },
+  { keywords: ['주유소', 'SK에너지', '에스케이에너지', 'GS칼텍스', '지에스칼텍스', 'S-OIL', '에쓰오일', '현대오일뱅크', 'LPG', '엘피지', '블루원에너지', '오일뱅크'], code: '812', name: '여비교통비', tag: '일반', note: '차량 등록시 822 차량유지비' },
 
   // 14. 주차료/하이패스/톨게이트
   { keywords: ['주차', '하이패스', '톨게이트', '파킹'], code: '812', name: '여비교통비', tag: '일반' },
@@ -183,7 +184,13 @@ export const PDF_ACCOUNT_RULES: { keywords: string[]; code: string; name: string
   { keywords: ['주점', '술집', '포차', '호프', '소주방'], code: '813', name: '접대비', tag: '일반', note: '5인 이상(4대보험 다수): 복리후생비 검토 / 환급시 접대비' },
 
   // 19. 골프장
-  { keywords: ['골프장', '골프', '컨트리클럽', 'CC'], code: '813', name: '접대비', tag: '일반' },
+  { keywords: ['골프장', '골프', '컨트리클럽', 'CC', '씨씨'], code: '813', name: '접대비', tag: '일반' },
+
+  // 19-1. 사우나/목욕탕/찜질방
+  { keywords: ['사우나', '목욕탕', '찜질방', '스파', '온천'], code: '813', name: '접대비', tag: '일반' },
+
+  // 19-2. 레저/워터파크/랜드
+  { keywords: ['워터파크', '랜드', '테마파크', '놀이공원', '리조트'], code: '813', name: '접대비', tag: '일반' },
 
   // 20. 모텔/호텔
   { keywords: ['모텔', '호텔'], code: '813', name: '접대비', tag: '일반', note: '건설업: 매입(여비교통비)' },
@@ -195,7 +202,7 @@ export const PDF_ACCOUNT_RULES: { keywords: string[]; code: string; name: string
   { keywords: ['보험', '손해보험', '생명보험', '보험료'], code: '821', name: '보험료', tag: '일반' },
 
   // 23. 인터넷 사용료
-  { keywords: ['인터넷', 'SK브로드밴드', 'KT인터넷', 'LG유플러스'], code: '814', name: '통신비', tag: '매입', note: '세금계산서 중복 주의 → 카드전송제외 / 사업자주소=집: 전송제외' },
+  { keywords: ['인터넷', 'SK브로드밴드', '에스케이브로드밴드', 'KT인터넷', '케이티인터넷', 'LG유플러스', '엘지유플러스'], code: '814', name: '통신비', tag: '매입', note: '세금계산서 중복 주의 → 카드전송제외 / 사업자주소=집: 전송제외' },
 
   // 24. 휴대폰 사용료
   { keywords: ['휴대폰사용료', '휴대폰'], code: '814', name: '통신비', tag: '일반' },
@@ -222,7 +229,7 @@ export const PDF_ACCOUNT_RULES: { keywords: string[]; code: string; name: string
   { keywords: ['소프트웨어개발', '소프트웨어'], code: '831', name: '지급수수료', tag: '매입' },
 
   // 32. 일반 카드사
-  { keywords: ['신한카드', '삼성카드', '현대카드', '국민카드', 'KB카드', '롯데카드', '하나카드', '우리카드', 'BC카드', '카드사'], code: '831', name: '지급수수료', tag: '일반', note: '고액거래: 거주지 관리비 가능성 → 전송제외 주의' },
+  { keywords: ['신한카드', '삼성카드', '현대카드', '국민카드', 'KB카드', '케이비카드', '롯데카드', '하나카드', '우리카드', 'BC카드', '비씨카드', '카드사'], code: '831', name: '지급수수료', tag: '일반', note: '고액거래: 거주지 관리비 가능성 → 전송제외 주의' },
 
   // 33. 병원/금융결제원/헬스장 → 전송제외
   { keywords: ['병원', '의원', '치과', '한의원', '헬스장', '피트니스', '금융결제원'], code: '', name: '', tag: '전송제외', note: '법인: 단기대여금 가능' },
@@ -277,6 +284,7 @@ export const CATEGORY_ACCOUNT_MAP: Record<string, { code: string; name: string; 
   '보험': { code: '821', name: '보험료', tag: '일반' },
   '제조': { code: '830', name: '소모품비', tag: '매입' },
   '스포츠': { code: '813', name: '접대비', tag: '일반' },
+  '사우나/목욕': { code: '813', name: '접대비', tag: '일반' },
   '오락/여가': { code: '813', name: '접대비', tag: '일반' },
   '여행': { code: '812', name: '여비교통비', tag: '매입' },
   '청소/환경': { code: '830', name: '소모품비', tag: '매입' },
@@ -415,7 +423,7 @@ function applyConditions(
   }
 
   // 주유소: 차량 등록 여부로 분기
-  if (['주유소', 'SK에너지', 'GS칼텍스', 'S-OIL', '현대오일뱅크', 'LPG'].some(kw => text.includes(kw))) {
+  if (['주유소', 'SK에너지', '에스케이에너지', 'GS칼텍스', '지에스칼텍스', 'S-OIL', '에쓰오일', '현대오일뱅크', 'LPG', '엘피지'].some(kw => text.includes(kw))) {
     if (conditions.hasVehicle) {
       return { code: '822', name: '차량유지비', tag: '매입' };
     }
@@ -423,7 +431,7 @@ function applyConditions(
   }
 
   // 편의점: 금액 기준 분기
-  if (['편의점', 'GS25', 'CU', '씨유', '세븐일레븐', '이마트24', '미니스톱'].some(kw => text.includes(kw))) {
+  if (['편의점', 'GS25', '지에스25', 'CU', '씨유', '세븐일레븐', '이마트24', '미니스톱'].some(kw => text.includes(kw))) {
     if (row.amount < 10000) {
       return { code: '812', name: '여비교통비', tag: '매입' };
     }
