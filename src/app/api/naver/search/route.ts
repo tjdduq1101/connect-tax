@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server';
-import axios from 'axios';
 
 export async function GET(request: NextRequest) {
   const q = request.nextUrl.searchParams.get('q');
@@ -13,15 +12,21 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const response = await axios.get('https://openapi.naver.com/v1/search/local.json', {
-      params: { query: q, display: 5, sort: 'random' },
+    const url = `https://openapi.naver.com/v1/search/local.json?query=${encodeURIComponent(q)}&display=5&sort=random`;
+    const res = await fetch(url, {
       headers: {
         'X-Naver-Client-Id': clientId,
         'X-Naver-Client-Secret': clientSecret,
       },
     });
 
-    const items = (response.data.items || []).map((item: { title: string; category: string; address: string; roadAddress: string; telephone: string; description?: string; link: string }) => ({
+    if (!res.ok) {
+      return Response.json({ error: '네이버 검색 중 오류가 발생했습니다.' }, { status: res.status });
+    }
+
+    const data = await res.json();
+
+    const items = (data.items || []).map((item: { title: string; category: string; address: string; roadAddress: string; telephone: string; description?: string; link: string }) => ({
       title: item.title.replace(/<[^>]+>/g, ''),
       category: item.category,
       address: item.address,
@@ -32,8 +37,7 @@ export async function GET(request: NextRequest) {
     }));
 
     return Response.json({ items });
-  } catch (err: unknown) {
-    const status = axios.isAxiosError(err) ? (err.response?.status || 500) : 500;
-    return Response.json({ error: '네이버 검색 중 오류가 발생했습니다.' }, { status });
+  } catch {
+    return Response.json({ error: '네이버 검색 중 오류가 발생했습니다.' }, { status: 500 });
   }
 }

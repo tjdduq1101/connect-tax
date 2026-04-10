@@ -338,6 +338,55 @@ export const ACCOUNT_NAME_TO_CODE: Record<string, string> = {
   '건물관리비': '837',
 };
 
+// ── 코드 → 계정과목 매핑 (공유) ──
+export const CODE_TO_ACCOUNT: Record<string, { name: string; tag: string }> = {
+  "530": { name: "소모품비", tag: "매입" },
+  "630": { name: "소모품비", tag: "매입" },
+  "730": { name: "소모품비", tag: "매입" },
+  "801": { name: "임원급여", tag: "" },
+  "802": { name: "직원급여", tag: "" },
+  "803": { name: "상여금", tag: "" },
+  "811": { name: "복리후생비", tag: "매입" },
+  "812": { name: "여비교통비", tag: "매입" },
+  "813": { name: "접대비", tag: "일반" },
+  "814": { name: "통신비", tag: "매입" },
+  "815": { name: "수도광열비", tag: "매입" },
+  "816": { name: "전력비", tag: "매입" },
+  "817": { name: "세금과공과금", tag: "일반" },
+  "818": { name: "감가상각비", tag: "일반" },
+  "819": { name: "지급임차료", tag: "매입" },
+  "820": { name: "수선비", tag: "매입" },
+  "821": { name: "보험료", tag: "일반" },
+  "822": { name: "차량유지비", tag: "매입" },
+  "823": { name: "경상연구개발비", tag: "매입" },
+  "824": { name: "운반비", tag: "매입" },
+  "825": { name: "교육훈련비", tag: "매입" },
+  "826": { name: "도서인쇄비", tag: "매입" },
+  "827": { name: "회의비", tag: "매입" },
+  "828": { name: "포장비", tag: "매입" },
+  "829": { name: "사무용품비", tag: "매입" },
+  "830": { name: "소모품비", tag: "매입" },
+  "831": { name: "지급수수료", tag: "매입" },
+  "832": { name: "보관료", tag: "매입" },
+  "833": { name: "광고선전비", tag: "매입" },
+  "834": { name: "판매촉진비", tag: "매입" },
+  "835": { name: "대손상각비", tag: "일반" },
+  "837": { name: "건물관리비", tag: "매입" },
+};
+
+// ── 계정과목명 → 코드 변환 (역매핑) ──
+export const NAME_TO_CODE: Record<string, string> = {
+  "복리후생비": "811", "여비교통비": "812", "접대비": "813",
+  "통신비": "814", "수도광열비": "815", "전력비": "816",
+  "세금과공과금": "817", "감가상각비": "818", "지급임차료": "819",
+  "수선비": "820", "보험료": "821", "차량유지비": "822",
+  "경상연구개발비": "823", "운반비": "824", "교육훈련비": "825",
+  "도서인쇄비": "826", "회의비": "827", "포장비": "828",
+  "사무용품비": "829", "지급수수료": "831", "보관료": "832",
+  "광고선전비": "833", "판매촉진비": "834", "대손상각비": "835",
+  "건물관리비": "837", "임원급여": "801", "직원급여": "802", "상여금": "803",
+};
+
 // ── 공통 함수 ──
 export function classifyBusiness(text: string): CategoryInfo {
   const lower = text.toLowerCase();
@@ -400,6 +449,17 @@ function applyConditions(
 ): { code: string; name: string; tag: string; note?: string } {
   const text = [row.tradeName, row.businessType, row.sector].filter(Boolean).join(' ').toLowerCase();
 
+  // 플랫폼/PG사/마트: 업종별 분기 (상품 or 원재료) — 최우선 체크
+  if (['음식점업', '도소매', '전자상거래', '제조업'].includes(conditions.businessType)) {
+    const platformKws = ['쿠팡', '네이버파이낸셜', '십일번가', '11번가', '케이지이니시스', '갤럭시아머니트리', '나이스페이먼츠', '이마트', '홈플러스', '코스트코', '엔에이치엔케이씨피'];
+    if (platformKws.some(kw => text.includes(kw.toLowerCase()))) {
+      if (conditions.businessType === '제조업') {
+        return { code: '153', name: '원재료', tag: '매입', note: '제조업 원재료' };
+      }
+      return { code: '146', name: '상품', tag: '매입', note: '도소매/음식점업 상품' };
+    }
+  }
+
   // 식비/커피숍: 직원 유무로 분기
   if (['식당', '음식점', '카페', '커피', '베이커리', '빵집'].some(kw => text.includes(kw))) {
     if (!conditions.hasEmployee) {
@@ -433,7 +493,7 @@ function applyConditions(
   // 편의점: 금액 기준 분기
   if (['편의점', 'GS25', '지에스25', 'CU', '씨유', '세븐일레븐', '이마트24', '미니스톱'].some(kw => text.includes(kw))) {
     if (row.amount < 10000) {
-      return { code: '812', name: '여비교통비', tag: '매입' };
+      return { code: '812', name: '여비교통비', tag: '일반' };
     }
     if (conditions.isRefund) {
       return { code: '830', name: '소모품비', tag: '일반', note: '환급: 불공제' };
@@ -471,17 +531,6 @@ function applyConditions(
       return { code: '824', name: '운반비', tag: '매입' };
     }
     return { code: '814', name: '통신비', tag: '일반' };
-  }
-
-  // 플랫폼/PG사/마트: 업종별 분기 (상품 or 원재료)
-  if (['음식점업', '도소매', '전자상거래', '제조업'].includes(conditions.businessType)) {
-    const platformKws = ['쿠팡', '네이버파이낸셜', '십일번가', '11번가', '케이지이니시스', '갤럭시아머니트리', '나이스페이먼츠', '이마트', '홈플러스', '코스트코', '엔에이치엔케이씨피'];
-    if (platformKws.some(kw => text.includes(kw.toLowerCase()))) {
-      if (conditions.businessType === '제조업') {
-        return { code: '153', name: '원재료', tag: '매입', note: '제조업 원재료' };
-      }
-      return { code: '146', name: '상품', tag: '매입', note: '도소매/음식점업 상품' };
-    }
   }
 
   // 전송제외 항목

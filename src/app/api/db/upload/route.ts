@@ -53,37 +53,45 @@ export async function POST(request: NextRequest) {
       existingMap[row.b_no] = row.b_nm;
     }
 
-    const rows = await Promise.all(
-      businesses.map(async (b) => {
-        const row = {
-          b_no: b.b_no,
-          b_nm: b.b_nm || null,
-          p_nm: b.p_nm || null,
-          b_sector: b.b_sector || null,
-          b_type: b.b_type || null,
-          updated_at: new Date().toISOString(),
-        };
+    // 배치 처리: 5개씩 순차 실행하여 네이버 API rate limit 방지
+    const BATCH_SIZE = 5;
+    const rows: { b_no: string; b_nm: string | null; p_nm: string | null; b_sector: string | null; b_type: string | null; updated_at: string }[] = [];
 
-        // 합성키(상호명 기반)는 네이버 충돌 검사 불필요
-        const isSyntheticKey = b.b_no.startsWith("nm_");
-        if (!isSyntheticKey) {
-          const existingName = existingMap[b.b_no];
-          const newName = b.b_nm;
+    for (let i = 0; i < businesses.length; i += BATCH_SIZE) {
+      const batch = businesses.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(
+        batch.map(async (b) => {
+          const row = {
+            b_no: b.b_no,
+            b_nm: b.b_nm || null,
+            p_nm: b.p_nm || null,
+            b_sector: b.b_sector || null,
+            b_type: b.b_type || null,
+            updated_at: new Date().toISOString(),
+          };
 
-          if (existingName && newName && existingName !== newName) {
-            const [newHit, existingHit] = await Promise.all([
-              searchNaverName(newName),
-              searchNaverName(existingName),
-            ]);
-            if (existingHit && !newHit) {
-              row.b_nm = existingName;
+          // 합성키(상호명 기반)는 네이버 충돌 검사 불필요
+          const isSyntheticKey = b.b_no.startsWith("nm_");
+          if (!isSyntheticKey) {
+            const existingName = existingMap[b.b_no];
+            const newName = b.b_nm;
+
+            if (existingName && newName && existingName !== newName) {
+              const [newHit, existingHit] = await Promise.all([
+                searchNaverName(newName),
+                searchNaverName(existingName),
+              ]);
+              if (existingHit && !newHit) {
+                row.b_nm = existingName;
+              }
             }
           }
-        }
 
-        return row;
-      })
-    );
+          return row;
+        })
+      );
+      rows.push(...batchResults);
+    }
 
     const { error } = await supabase
       .from('businesses')

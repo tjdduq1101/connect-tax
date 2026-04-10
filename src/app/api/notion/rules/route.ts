@@ -33,21 +33,31 @@ export async function GET() {
   }
 
   try {
-    const res = await fetch(`${NOTION_API}/databases/${process.env.NOTION_DATABASE_ID}/query`, {
-      method: 'POST',
-      headers: notionHeaders(),
-      body: JSON.stringify({ page_size: 100 }),
-    });
+    const allResults: { id: string; properties: Record<string, { type: string; title?: Array<{ plain_text: string }>; rich_text?: Array<{ plain_text: string }>; multi_select?: Array<{ name: string }> }> }[] = [];
+    let startCursor: string | undefined = undefined;
 
-    if (!res.ok) {
-      const err = await res.text();
-      console.error('Notion query failed:', err);
-      return Response.json({ error: '노션 조회 실패' }, { status: res.status });
-    }
+    do {
+      const body: Record<string, unknown> = { page_size: 100 };
+      if (startCursor) body.start_cursor = startCursor;
 
-    const data = await res.json();
+      const res = await fetch(`${NOTION_API}/databases/${process.env.NOTION_DATABASE_ID}/query`, {
+        method: 'POST',
+        headers: notionHeaders(),
+        body: JSON.stringify(body),
+      });
 
-    const rules: NotionRule[] = (data.results || []).map((page: { id: string; properties: Record<string, { type: string; title?: Array<{ plain_text: string }>; rich_text?: Array<{ plain_text: string }>; multi_select?: Array<{ name: string }> }> }) => {
+      if (!res.ok) {
+        const err = await res.text();
+        console.error('Notion query failed:', err);
+        return Response.json({ error: '노션 조회 실패' }, { status: res.status });
+      }
+
+      const data = await res.json();
+      allResults.push(...(data.results || []));
+      startCursor = data.has_more ? data.next_cursor : undefined;
+    } while (startCursor);
+
+    const rules: NotionRule[] = allResults.map((page) => {
       const props = page.properties;
       return {
         id: page.id,

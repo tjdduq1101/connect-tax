@@ -26,12 +26,14 @@ export async function GET(request: NextRequest) {
     // 거래처명으로 검색 (ilike 부분 매칭)
     if (name) {
       const cleaned = name.replace(/주식회사|（주）|\(주\)|㈜|유한회사/g, '').trim();
+      // SQL 와일드카드 이스케이프
+      const escaped = cleaned.replace(/[%_]/g, c => `\\${c}`);
       const { data, error } = await supabase
         .from('businesses')
         .select('*')
-        .ilike('b_nm', `%${cleaned}%`)
+        .ilike('b_nm', `%${escaped}%`)
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (error || !data) return Response.json({ data: null });
       return Response.json({ data });
