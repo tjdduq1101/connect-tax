@@ -660,8 +660,9 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
 // =============================================
 type TabKey = 'home' | 'regularSalary' | 'salary' | 'freelancer' | 'wageAllowance' | 'dbUpload' | 'businessLookup' | 'accountRecommend' | 'cashReceiptClassifier';
 type CategoryKey = 'home' | 'labor' | 'tax';
+type MenuGroup = { category: CategoryKey; label: string; color: string; items: { key: TabKey; icon: string; title: string; desc: string }[] };
 
-const menuGroups: { category: CategoryKey; label: string; color: string; items: { key: TabKey; icon: string; title: string; desc: string }[] }[] = [
+const menuGroups: MenuGroup[] = [
   {
     category: 'labor',
     label: '노무 관리',
@@ -686,6 +687,45 @@ const menuGroups: { category: CategoryKey; label: string; color: string; items: 
   },
 ];
 
+function SideNav({ activeTab, onTabChange, onHome }: {
+  activeTab: TabKey;
+  onTabChange: (key: TabKey) => void;
+  onHome: () => void;
+}) {
+  const group = menuGroups.find(g => g.items.some(i => i.key === activeTab));
+  if (!group) return null;
+
+  return (
+    <nav className="hidden lg:block sticky top-6 self-start w-56 shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      <h3 className="text-xs font-black text-slate-400 tracking-wider uppercase mb-3">{group.label}</h3>
+      <ul className="space-y-1">
+        {group.items.map(item => {
+          const isActive = item.key === activeTab;
+          return (
+            <li key={item.key}>
+              <button onClick={() => onTabChange(item.key)}
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm font-bold transition-all ${
+                  isActive
+                    ? 'text-white'
+                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                }`}
+                style={isActive ? { background: group.color } : undefined}>
+                {item.title}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="mt-4 pt-3 border-t border-slate-100">
+        <button onClick={onHome}
+          className="w-full text-left px-3 py-2 text-xs font-bold text-slate-400 hover:text-blue-600 transition-colors">
+          &#8592; 홈으로
+        </button>
+      </div>
+    </nav>
+  );
+}
+
 export default function MainPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('home');
   const [activeCategory, setActiveCategory] = useState<CategoryKey>('home');
@@ -694,7 +734,7 @@ export default function MainPage() {
   const currentGroup = menuGroups.find(g => g.category === activeCategory);
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 text-slate-900">
+    <div className={`min-h-screen bg-slate-50 text-slate-900 ${activeTab === 'home' ? 'flex items-center justify-center p-6' : ''}`}>
       {activeTab === 'home' && (
         <div className="w-full max-w-md animate-in fade-in zoom-in duration-500 text-center">
           <div className="bg-blue-600 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-blue-200">
@@ -754,14 +794,21 @@ export default function MainPage() {
         </div>
       )}
 
-      {activeTab === 'regularSalary' && <RegularSalaryCalc onBack={goHome} />}
-      {activeTab === 'salary' && <SalaryCalc onBack={goHome} />}
-      {activeTab === 'freelancer' && <FreelancerCalc onBack={goHome} />}
-      {activeTab === 'wageAllowance' && <WageAndAllowanceCalc onBack={goHome} />}
-      {activeTab === 'dbUpload' && <DbUpload onBack={goHome} />}
-      {activeTab === 'businessLookup' && <BusinessLookup onBack={goHome} />}
-      {activeTab === 'accountRecommend' && <AccountRecommend onBack={goHome} />}
-      {activeTab === 'cashReceiptClassifier' && <CashReceiptClassifier onBack={goHome} />}
+      {activeTab !== 'home' && (
+        <div className="w-full flex justify-center gap-6 p-6">
+          <div className="w-full max-w-md">
+            {activeTab === 'regularSalary' && <RegularSalaryCalc onBack={goHome} />}
+            {activeTab === 'salary' && <SalaryCalc onBack={goHome} />}
+            {activeTab === 'freelancer' && <FreelancerCalc onBack={goHome} />}
+            {activeTab === 'wageAllowance' && <WageAndAllowanceCalc onBack={goHome} />}
+            {activeTab === 'dbUpload' && <DbUpload onBack={goHome} />}
+            {activeTab === 'businessLookup' && <BusinessLookup onBack={goHome} />}
+            {activeTab === 'accountRecommend' && <AccountRecommend onBack={goHome} />}
+            {activeTab === 'cashReceiptClassifier' && <CashReceiptClassifier onBack={goHome} />}
+          </div>
+          <SideNav activeTab={activeTab} onTabChange={setActiveTab} onHome={goHome} />
+        </div>
+      )}
     </div>
   );
 }
