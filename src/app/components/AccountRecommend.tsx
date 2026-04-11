@@ -1148,42 +1148,42 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
               </div>
 
               {/* 테이블 */}
-              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+              <div className="border border-slate-300 rounded-xl overflow-hidden">
                 <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-                  <table className="text-xs w-full" style={{ tableLayout: "fixed" }}>
-                    <thead className="bg-gradient-to-b from-slate-50 to-slate-100/80 text-slate-500 font-semibold text-[11px] sticky top-0 z-10 border-b border-slate-200">
-                      <tr>
-                        <th className="px-3 py-2.5 align-middle" style={{ width: 36 }}>
+                  <table className="text-xs w-full border-collapse" style={{ tableLayout: "fixed" }}>
+                    <thead className="bg-slate-100 text-slate-600 font-semibold text-[11px] sticky top-0 z-10">
+                      <tr className="border-b border-slate-300">
+                        <th className="px-2 py-2 align-middle border-r border-slate-300" style={{ width: 36 }}>
                           <input type="checkbox"
                             checked={filteredRows.length > 0 && checkedIndices.size === filteredRows.length}
                             onChange={toggleSelectAll}
                             className="w-3.5 h-3.5 rounded accent-blue-600 cursor-pointer"
                           />
                         </th>
-                        <th className="px-2 py-2.5 text-center text-slate-400 align-middle" style={{ width: 40 }}>번호</th>
-                        <th className="px-3 py-2.5 text-left relative select-none" style={{ width: colWidths.vendor }}>
+                        <th className="px-2 py-2 text-center align-middle border-r border-slate-300" style={{ width: 40 }}>번호</th>
+                        <th className="px-3 py-2 text-left relative select-none border-r border-slate-300" style={{ width: colWidths.vendor }}>
                           <span className="cursor-pointer hover:text-blue-500 transition-colors" onClick={() => toggleSort("tradeName")}>
                             거래처{" "}{sortConfig?.field === "tradeName" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
                           </span>
-                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("vendor", e)}><div className="w-px h-3/4 bg-transparent group-hover:bg-blue-400 transition-colors" /></div>
+                          <div className="absolute -right-1 top-0 h-full w-2 cursor-col-resize z-10" onMouseDown={(e) => startResize("vendor", e)} />
                         </th>
-                        <th className="px-3 py-2.5 text-right relative select-none" style={{ width: colWidths.total }}>
+                        <th className="px-3 py-2 text-right relative select-none border-r border-slate-300" style={{ width: colWidths.total }}>
                           합계
-                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("total", e)}><div className="w-px h-3/4 bg-transparent group-hover:bg-blue-400 transition-colors" /></div>
+                          <div className="absolute -right-1 top-0 h-full w-2 cursor-col-resize z-10" onMouseDown={(e) => startResize("total", e)} />
                         </th>
-                        <th className="px-3 py-2.5 text-left relative select-none" style={{ width: colWidths.account }}>
+                        <th className="px-3 py-2 text-left relative select-none border-r border-slate-300" style={{ width: colWidths.account }}>
                           <span className="cursor-pointer hover:text-blue-500 transition-colors" onClick={() => toggleSort("name")}>
                             계정과목{" "}{sortConfig?.field === "name" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
                           </span>
-                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("account", e)}><div className="w-px h-3/4 bg-transparent group-hover:bg-blue-400 transition-colors" /></div>
+                          <div className="absolute -right-1 top-0 h-full w-2 cursor-col-resize z-10" onMouseDown={(e) => startResize("account", e)} />
                         </th>
-                        <th className="px-2 py-2.5 text-center cursor-pointer select-none hover:text-blue-500 transition-colors" style={{ width: 52 }} onClick={() => toggleSort("tag")}>
+                        <th className="px-2 py-2 text-center cursor-pointer select-none hover:text-blue-500 transition-colors border-r border-slate-300" style={{ width: 52 }} onClick={() => toggleSort("tag")}>
                           태그{" "}{sortConfig?.field === "tag" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
                         </th>
-                        <th className="px-2 py-2.5 text-center" style={{ width: 48 }}>신뢰도</th>
-                        <th className="px-3 py-2.5 text-left relative select-none" style={{ width: colWidths.biz }}>
+                        <th className="px-2 py-2 text-center border-r border-slate-300" style={{ width: 48 }}>신뢰도</th>
+                        <th className="px-3 py-2 text-left relative select-none" style={{ width: colWidths.biz }}>
                           업종
-                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("biz", e)}><div className="w-px h-3/4 bg-transparent group-hover:bg-blue-400 transition-colors" /></div>
+                          <div className="absolute -right-1 top-0 h-full w-2 cursor-col-resize z-10" onMouseDown={(e) => startResize("biz", e)} />
                         </th>
                       </tr>
                     </thead>
@@ -1218,15 +1218,15 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
                         const isShowingSomoum = somoumPicker === origIdx;
 
                         return (
-                          <tr key={i} className={`border-t border-slate-200 hover:bg-slate-50/50 transition-colors ${rowBg}`}>
-                            <td className="px-3 py-2 align-middle" onClick={(e) => { e.stopPropagation(); handleCheckbox(i, origIdx, e); }}>
+                          <tr key={i} className={`border-t border-slate-200 hover:bg-blue-50/30 transition-colors ${rowBg}`}>
+                            <td className="px-2 py-1.5 align-middle border-r border-slate-200" onClick={(e) => { e.stopPropagation(); handleCheckbox(i, origIdx, e); }}>
                               <input type="checkbox" checked={isChecked} onChange={() => {}} className="w-3.5 h-3.5 rounded accent-blue-600 cursor-pointer" />
                             </td>
-                            <td className="px-2 py-2 text-center align-middle text-slate-300 tabular-nums">{origIdx + 1}</td>
-                            <td className="px-3 py-2 truncate" style={{ maxWidth: colWidths.vendor }} title={c.input.거래처}>{c.input.거래처}</td>
-                            <td className="px-3 py-2 text-right text-slate-500 tabular-nums truncate" style={{ maxWidth: colWidths.total }}>{c.input.합계.toLocaleString()}</td>
+                            <td className="px-2 py-1.5 text-center align-middle text-slate-400 tabular-nums border-r border-slate-200">{origIdx + 1}</td>
+                            <td className="px-3 py-1.5 truncate border-r border-slate-200" style={{ maxWidth: colWidths.vendor }} title={c.input.거래처}>{c.input.거래처}</td>
+                            <td className="px-3 py-1.5 text-right text-slate-500 tabular-nums truncate border-r border-slate-200" style={{ maxWidth: colWidths.total }}>{c.input.합계.toLocaleString()}</td>
                             {/* 계정과목 편집 */}
-                            <td className="px-3 py-2 relative">
+                            <td className="px-3 py-1.5 relative border-r border-slate-200">
                               {isEditingAccount ? (
                                 <div className="flex flex-col gap-1 min-w-[180px]">
                                   <input autoFocus value={editValue} onChange={(e) => setEditValue(e.target.value)}
@@ -1260,7 +1260,7 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
                               )}
                             </td>
                             {/* 태그 편집 */}
-                            <td className="px-2 py-2 text-center relative">
+                            <td className="px-2 py-1.5 text-center relative border-r border-slate-200">
                               {isEditingTag ? (
                                 <div className="absolute top-0 left-1/2 -translate-x-1/2 z-20 bg-white border border-blue-200 rounded-xl shadow-lg p-1 flex flex-col gap-0.5 min-w-[80px]">
                                   {["매입", "일반", "전송제외"].map((tag) => (
@@ -1280,10 +1280,10 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
                                 </button>
                               )}
                             </td>
-                            <td className={`px-2 py-2 text-center text-[10px] ${confColor}`}>
+                            <td className={`px-2 py-1.5 text-center text-[10px] border-r border-slate-200 ${confColor}`}>
                               {c.manualOverride ? "✎" : isAi ? "◇" : c.result.confidence === "high" ? "●" : c.result.confidence === "medium" ? "◐" : "○"}
                             </td>
-                            <td className="px-3 py-2 text-[10px] text-slate-400 truncate" style={{ maxWidth: colWidths.biz }}>{bizDisplay}</td>
+                            <td className="px-3 py-1.5 text-[10px] text-slate-400 truncate" style={{ maxWidth: colWidths.biz }}>{bizDisplay}</td>
                           </tr>
                         );
                       })}
