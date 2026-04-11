@@ -404,7 +404,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
   const bizCacheRef = useRef<Map<string, BusinessInfo>>(new Map());
 
   // 열 너비 (드래그 리사이즈)
-  const [colWidths, setColWidths] = useState({ vendor: 120, total: 80, origDebit: 80, account: 140, biz: 90 });
+  const [colWidths, setColWidths] = useState({ vendor: 140, total: 90, origDebit: 100, account: 160, biz: 110 });
   const resizingRef = useRef<{ col: keyof typeof colWidths; startX: number; startWidth: number } | null>(null);
 
   const startResize = (col: keyof typeof colWidths, e: React.MouseEvent) => {
@@ -950,50 +950,47 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
               </div>
 
               {/* 테이블 */}
-              <div className="border rounded-2xl overflow-hidden">
+              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                 <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-                  <table className="text-xs" style={{ tableLayout: "fixed", width: "100%" }}>
-                    <thead className="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase sticky top-0 z-10">
+                  <table className="text-xs w-full" style={{ tableLayout: "fixed" }}>
+                    <thead className="bg-gradient-to-b from-slate-50 to-slate-100/80 text-slate-500 font-semibold text-[11px] sticky top-0 z-10 border-b border-slate-200">
                       <tr>
-                        <th className="p-2" style={{ width: 32 }}>
+                        <th className="px-3 py-2.5" style={{ width: 36 }}>
                           <input type="checkbox"
                             checked={filteredRows.length > 0 && checkedIndices.size === filteredRows.length}
                             onChange={toggleSelectAll}
                             className="w-3.5 h-3.5 rounded accent-blue-600 cursor-pointer"
                           />
                         </th>
-                        <th className="p-2 text-left" style={{ width: 28 }}>#</th>
-                        <th className="p-2 text-left" style={{ width: 68 }}>일자</th>
-                        <th className="p-2 text-left relative select-none" style={{ width: colWidths.vendor }}>
+                        <th className="px-2 py-2.5 text-center text-slate-400" style={{ width: 40 }}>번호</th>
+                        <th className="px-3 py-2.5 text-left" style={{ width: 72 }}>일자</th>
+                        <th className="px-3 py-2.5 text-left relative select-none" style={{ width: colWidths.vendor }}>
                           <span className="cursor-pointer hover:text-blue-500 transition-colors" onClick={() => toggleSort("tradeName")}>
                             거래처{" "}{sortConfig?.field === "tradeName" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
                           </span>
-                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("vendor", e)}><div className="w-px h-3/4 bg-slate-300 group-hover:bg-blue-400 transition-colors" /></div>
+                          <div className="absolute right-0 top-0 h-full w-1 cursor-col-resize z-10 hover:bg-blue-400 transition-colors" onMouseDown={(e) => startResize("vendor", e)} />
                         </th>
-                        <th className="p-2 text-right relative select-none" style={{ width: colWidths.total }}>
+                        <th className="px-3 py-2.5 text-right relative select-none" style={{ width: colWidths.total }}>
                           합계
-                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("total", e)}><div className="w-px h-3/4 bg-slate-300 group-hover:bg-blue-400 transition-colors" /></div>
+                          <div className="absolute right-0 top-0 h-full w-1 cursor-col-resize z-10 hover:bg-blue-400 transition-colors" onMouseDown={(e) => startResize("total", e)} />
                         </th>
-                        <th className="p-2 text-left relative select-none" style={{ width: colWidths.origDebit }}>
+                        <th className="px-3 py-2.5 text-left relative select-none" style={{ width: colWidths.origDebit }}>
                           기존 차변
-                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("origDebit", e)}><div className="w-px h-3/4 bg-slate-300 group-hover:bg-blue-400 transition-colors" /></div>
+                          <div className="absolute right-0 top-0 h-full w-1 cursor-col-resize z-10 hover:bg-blue-400 transition-colors" onMouseDown={(e) => startResize("origDebit", e)} />
                         </th>
-                        <th className="p-2 text-center" style={{ width: 24 }}>→</th>
-                        <th className="p-2 text-left cursor-pointer select-none hover:text-blue-500 transition-colors" style={{ width: 44 }} onClick={() => toggleSort("code")}>
-                          코드{" "}{sortConfig?.field === "code" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
-                        </th>
-                        <th className="p-2 text-left relative select-none" style={{ width: colWidths.account }}>
+                        <th className="px-2 py-2.5 text-center" style={{ width: 28 }}>→</th>
+                        <th className="px-3 py-2.5 text-left relative select-none" style={{ width: colWidths.account }}>
                           <span className="cursor-pointer hover:text-blue-500 transition-colors" onClick={() => toggleSort("name")}>
                             계정과목{" "}{sortConfig?.field === "name" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
                           </span>
-                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("account", e)}><div className="w-px h-3/4 bg-slate-300 group-hover:bg-blue-400 transition-colors" /></div>
+                          <div className="absolute right-0 top-0 h-full w-1 cursor-col-resize z-10 hover:bg-blue-400 transition-colors" onMouseDown={(e) => startResize("account", e)} />
                         </th>
-                        <th className="p-2 text-center cursor-pointer select-none hover:text-blue-500 transition-colors" style={{ width: 52 }} onClick={() => toggleSort("tag")}>
+                        <th className="px-2 py-2.5 text-center cursor-pointer select-none hover:text-blue-500 transition-colors" style={{ width: 52 }} onClick={() => toggleSort("tag")}>
                           구분{" "}{sortConfig?.field === "tag" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
                         </th>
-                        <th className="p-2 text-left relative select-none" style={{ width: colWidths.biz }}>
+                        <th className="px-3 py-2.5 text-left relative select-none" style={{ width: colWidths.biz }}>
                           업종
-                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("biz", e)}><div className="w-px h-3/4 bg-slate-300 group-hover:bg-blue-400 transition-colors" /></div>
+                          <div className="absolute right-0 top-0 h-full w-1 cursor-col-resize z-10 hover:bg-blue-400 transition-colors" onMouseDown={(e) => startResize("biz", e)} />
                         </th>
                       </tr>
                     </thead>
@@ -1021,24 +1018,20 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                         const isShowingSomoum = somoumPicker === origIdx;
 
                         return (
-                          <tr key={i} className={`border-t border-slate-50 ${rowBg}`}>
-                            <td className="p-2" onClick={(e) => { e.stopPropagation(); handleCheckbox(i, origIdx, e); }}>
+                          <tr key={i} className={`border-t border-slate-200 hover:bg-slate-50/50 transition-colors ${rowBg}`}>
+                            <td className="px-3 py-2" onClick={(e) => { e.stopPropagation(); handleCheckbox(i, origIdx, e); }}>
                               <input type="checkbox" checked={isChecked} onChange={() => {}} className="w-3.5 h-3.5 rounded accent-blue-600 cursor-pointer" />
                             </td>
-                            <td className="p-2 text-slate-300">{origIdx + 1}</td>
-                            <td className="p-2 text-slate-500 truncate">{c.input.일자}</td>
-                            <td className="p-2 truncate" style={{ maxWidth: colWidths.vendor }} title={c.input.거래처}>{c.input.거래처}</td>
-                            <td className="p-2 text-right text-slate-500 truncate" style={{ maxWidth: colWidths.total }}>{c.input.합계.toLocaleString()}</td>
-                            <td className="p-2 text-slate-400 truncate" style={{ maxWidth: colWidths.origDebit }}>{c.original차변 || "-"}</td>
-                            <td className="p-2 text-center">
+                            <td className="px-2 py-2 text-center text-slate-300 tabular-nums">{origIdx + 1}</td>
+                            <td className="px-3 py-2 text-slate-500 truncate">{c.input.일자}</td>
+                            <td className="px-3 py-2 truncate" style={{ maxWidth: colWidths.vendor }} title={c.input.거래처}>{c.input.거래처}</td>
+                            <td className="px-3 py-2 text-right text-slate-500 tabular-nums truncate" style={{ maxWidth: colWidths.total }}>{c.input.합계.toLocaleString()}</td>
+                            <td className="px-3 py-2 text-slate-400 truncate" style={{ maxWidth: colWidths.origDebit }}>{c.original차변 || "-"}</td>
+                            <td className="px-2 py-2 text-center">
                               {(c.changed || c.manualOverride) ? <span className="text-orange-500 font-black">→</span> : <span className="text-green-400">=</span>}
                             </td>
-                            {/* 코드 */}
-                            <td className="p-2 text-center font-black">
-                              <span className={confColor}>{eff.code || "-"}</span>
-                            </td>
                             {/* 계정과목 편집 */}
-                            <td className="p-2 relative">
+                            <td className="px-3 py-2 relative">
                               {isEditingAccount ? (
                                 <div className="flex flex-col gap-1 min-w-[160px]">
                                   <input autoFocus value={editValue} onChange={(e) => setEditValue(e.target.value)}
@@ -1075,7 +1068,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                               )}
                             </td>
                             {/* 태그 편집 */}
-                            <td className="p-2 text-center relative">
+                            <td className="px-2 py-2 text-center relative">
                               {isEditingTag ? (
                                 <div className="absolute top-0 left-1/2 -translate-x-1/2 z-20 bg-white border border-blue-200 rounded-xl shadow-lg p-1 flex flex-col gap-0.5 min-w-[80px]">
                                   {["매입", "일반", "전송제외"].map((tag) => (
@@ -1095,7 +1088,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                                 </button>
                               )}
                             </td>
-                            <td className="p-2 text-[10px] text-slate-400 truncate" style={{ maxWidth: colWidths.biz }}>
+                            <td className="px-3 py-2 text-[10px] text-slate-400 truncate" style={{ maxWidth: colWidths.biz }}>
                               {c.bizInfo.sector ? `${c.bizInfo.source === "db" ? "[DB]" : ""} ${c.bizInfo.sector}` : "-"}
                             </td>
                           </tr>
