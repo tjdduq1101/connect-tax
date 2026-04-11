@@ -687,42 +687,39 @@ const menuGroups: MenuGroup[] = [
   },
 ];
 
-function SideNav({ activeTab, onTabChange, onHome }: {
+function SideNav({ activeTab, onTabChange }: {
   activeTab: TabKey;
   onTabChange: (key: TabKey) => void;
-  onHome: () => void;
 }) {
   const group = menuGroups.find(g => g.items.some(i => i.key === activeTab));
   if (!group) return null;
 
   return (
-    <nav className="hidden lg:block sticky top-6 self-start w-56 shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-      <h3 className="text-xs font-black text-slate-400 tracking-wider uppercase mb-3">{group.label}</h3>
-      <ul className="space-y-1">
-        {group.items.map(item => {
-          const isActive = item.key === activeTab;
-          return (
-            <li key={item.key}>
-              <button onClick={() => onTabChange(item.key)}
-                className={`w-full text-left px-3 py-2 rounded-lg text-sm font-bold transition-all ${
-                  isActive
-                    ? 'text-white'
-                    : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                }`}
-                style={isActive ? { background: group.color } : undefined}>
-                {item.title}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      <div className="mt-4 pt-3 border-t border-slate-100">
-        <button onClick={onHome}
-          className="w-full text-left px-3 py-2 text-xs font-bold text-slate-400 hover:text-blue-600 transition-colors">
-          &#8592; 홈으로
-        </button>
-      </div>
-    </nav>
+    <div className="hidden lg:block self-start shrink-0 w-52">
+      {/* 돌아가기 버튼 높이만큼 spacer - 카드 상단에 맞춤 */}
+      <div className="h-9" />
+      <nav className="sticky top-6 bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+        <h3 className="text-[11px] font-black text-slate-400 tracking-wider uppercase mb-3">{group.label}</h3>
+        <ul className="space-y-1">
+          {group.items.map(item => {
+            const isActive = item.key === activeTab;
+            return (
+              <li key={item.key}>
+                <button onClick={() => onTabChange(item.key)}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all leading-snug ${
+                    isActive
+                      ? 'text-white'
+                      : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+                  }`}
+                  style={isActive ? { background: group.color } : undefined}>
+                  {item.title}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    </div>
   );
 }
 
@@ -806,7 +803,7 @@ export default function MainPage() {
             {activeTab === 'accountRecommend' && <AccountRecommend onBack={goHome} />}
             {activeTab === 'cashReceiptClassifier' && <CashReceiptClassifier onBack={goHome} />}
           </div>
-          <SideNav activeTab={activeTab} onTabChange={setActiveTab} onHome={goHome} />
+          <SideNav activeTab={activeTab} onTabChange={setActiveTab} />
         </div>
       )}
     </div>
