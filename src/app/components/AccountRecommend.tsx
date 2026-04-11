@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import {
   classifyTransaction,
@@ -74,6 +74,14 @@ interface ClassifiedRow {
   bizInfo: BusinessInfo;
   aiResult?: AiClassifyResult;
   manualOverride?: ManualOverride;
+}
+
+interface HistoryEntry {
+  id: string;
+  fileName: string;
+  savedAt: string;
+  count: number;
+  classified: ClassifiedRow[];
 }
 
 interface BusinessInfo {
@@ -418,6 +426,76 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
   // DB/네이버 조회 캐시 (거래처명 → BusinessInfo)
   const bizCacheRef = useRef<Map<string, BusinessInfo>>(new Map());
 
+  // 열 너비 (드래그 리사이즈)
+  const [colWidths, setColWidths] = useState({ vendor: 140, total: 80, account: 140, biz: 100 });
+  const resizingRef = useRef<{ col: keyof typeof colWidths; startX: number; startWidth: number } | null>(null);
+
+  const startResize = (col: keyof typeof colWidths, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingRef.current = { col, startX: e.clientX, startWidth: colWidths[col] };
+    const onMove = (ev: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const newWidth = Math.max(40, resizingRef.current.startWidth + ev.clientX - resizingRef.current.startX);
+      setColWidths((prev) => ({ ...prev, [resizingRef.current!.col]: newWidth }));
+    };
+    const onUp = () => {
+      resizingRef.current = null;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
+  // 탭: "classify" | "history"
+  const [activeTab, setActiveTab] = useState<"classify" | "history">("classify");
+
+  // 히스토리 목록
+  const [historyList, setHistoryList] = useState<HistoryEntry[]>([]);
+
+  // localStorage 히스토리 로드 (마운트 시)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("cardreceipt_history");
+      if (saved) {
+        const parsed: HistoryEntry[] = JSON.parse(saved);
+        if (Array.isArray(parsed)) setHistoryList(parsed);
+      }
+    } catch {}
+  }, []);
+
+  // 히스토리 저장 함수 (개수 제한 없음 — 용량 초과 시 가장 오래된 항목부터 제거)
+  const saveToHistory = useCallback((name: string, rows: ClassifiedRow[]) => {
+    const newEntry: HistoryEntry = {
+      id: Date.now().toString(),
+      fileName: name,
+      savedAt: new Date().toISOString(),
+      count: rows.length,
+      classified: rows,
+    };
+    setHistoryList((prev) => {
+      const updated = [newEntry, ...prev];
+      let list = updated;
+      while (list.length > 0) {
+        try {
+          localStorage.setItem("cardreceipt_history", JSON.stringify(list));
+          break;
+        } catch {
+          list = list.slice(0, list.length - 1); // 가장 오래된 항목 제거 후 재시도
+        }
+      }
+      return list;
+    });
+  }, []);
+
+  // 히스토리 항목 불러오기
+  const loadFromHistory = useCallback((entry: HistoryEntry) => {
+    setClassified(entry.classified);
+    setFileName(entry.fileName);
+    setActiveTab("classify");
+  }, []);
+
   // AI 분류
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
@@ -494,6 +572,7 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
       });
 
       setClassified(classifiedRows);
+      saveToHistory(file.name, classifiedRows);
 
       // AI 분류 자동 실행 (low confidence 항목 대상)
       const hasLow = classifiedRows.some((c) => c.result.confidence === "low");
@@ -507,7 +586,7 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
     } finally {
       setLoading(false);
     }
-  }, [conditions]);
+  }, [conditions, saveToHistory]);
 
   const handleReClassify = () => {
     if (classified.length === 0) return;
@@ -781,7 +860,89 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
           </p>
         </div>
 
-        <div className="p-6 space-y-5">
+        {/* 탭 */}
+        <div className="flex border-b border-slate-100">
+          <button
+            onClick={() => setActiveTab("history")}
+            className={`flex items-center gap-1.5 px-5 py-3 text-sm font-bold transition-colors border-b-2 ${activeTab === "history" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-400 hover:text-slate-600"}`}
+          >
+            <span>🕓</span> 히스토리 {historyList.length > 0 && <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full text-[10px]">{historyList.length}</span>}
+          </button>
+          <button
+            onClick={() => setActiveTab("classify")}
+            className={`flex items-center gap-1.5 px-5 py-3 text-sm font-bold transition-colors border-b-2 ${activeTab === "classify" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-400 hover:text-slate-600"}`}
+          >
+            <span>📋</span> 분류하기
+          </button>
+        </div>
+
+        {/* 히스토리 탭 */}
+        {activeTab === "history" && (
+          <div className="p-6 space-y-3">
+            {historyList.length === 0 ? (
+              <div className="text-center py-12 text-slate-300">
+                <div className="text-4xl mb-3">🕓</div>
+                <p className="text-sm font-bold">저장된 히스토리가 없습니다</p>
+                <p className="text-xs mt-1">분류하기 탭에서 파일을 업로드하면 자동으로 저장됩니다</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[11px] text-slate-400 font-bold">{historyList.length}개 저장됨</p>
+                  <button
+                    onClick={() => {
+                      if (!confirm("히스토리를 전체 삭제하시겠습니까?")) return;
+                      setHistoryList([]);
+                      try { localStorage.removeItem("cardreceipt_history"); } catch {}
+                    }}
+                    className="text-[11px] text-slate-300 hover:text-red-400 font-bold transition-colors"
+                  >
+                    전체 삭제
+                  </button>
+                </div>
+                {historyList.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center justify-between bg-slate-50 hover:bg-blue-50 rounded-2xl px-4 py-3 gap-3 cursor-pointer transition-colors group"
+                    onClick={() => loadFromHistory(entry)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-black text-slate-700 truncate group-hover:text-blue-700 transition-colors">{entry.fileName}</p>
+                      <p className="text-[11px] text-slate-400 font-bold mt-0.5">
+                        {new Date(entry.savedAt).toLocaleString("ko-KR")} &nbsp;·&nbsp; {entry.count}건
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => {
+                          const wb = buildSmartA10Workbook(entry.classified);
+                          XLSX.writeFile(wb, entry.fileName.replace(/\.(xlsx?)/i, "_분류결과.xls"));
+                        }}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black transition-colors"
+                      >
+                        다운로드
+                      </button>
+                      <button
+                        onClick={() => {
+                          setHistoryList((prev) => {
+                            const updated = prev.filter((e) => e.id !== entry.id);
+                            try { localStorage.setItem("cardreceipt_history", JSON.stringify(updated)); } catch {}
+                            return updated;
+                          });
+                        }}
+                        className="px-2 py-1.5 text-slate-300 hover:text-red-400 rounded-xl text-xs font-bold transition-colors"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+
+        {activeTab === "classify" && <div className="p-6 space-y-5">
           {/* 사업 조건 설정 */}
           <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
             <div className="flex items-center gap-2 mb-2">
@@ -989,32 +1150,44 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
               {/* 테이블 */}
               <div className="border rounded-2xl overflow-hidden">
                 <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-                  <table className="w-full text-xs">
+                  <table className="text-xs" style={{ tableLayout: "fixed", width: "100%" }}>
                     <thead className="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase sticky top-0 z-10">
                       <tr>
-                        <th className="p-2 w-8">
+                        <th className="p-2" style={{ width: 32 }}>
                           <input type="checkbox"
                             checked={filteredRows.length > 0 && checkedIndices.size === filteredRows.length}
                             onChange={toggleSelectAll}
                             className="w-3.5 h-3.5 rounded accent-blue-600 cursor-pointer"
                           />
                         </th>
-                        <th className="p-2 text-left w-6">#</th>
-                        <th className="p-2 text-left cursor-pointer select-none hover:text-blue-500 transition-colors" onClick={() => toggleSort("tradeName")}>
-                          거래처{" "}{sortConfig?.field === "tradeName" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
+                        <th className="p-2 text-left" style={{ width: 28 }}>#</th>
+                        <th className="p-2 text-left relative select-none" style={{ width: colWidths.vendor }}>
+                          <span className="cursor-pointer hover:text-blue-500 transition-colors" onClick={() => toggleSort("tradeName")}>
+                            거래처{" "}{sortConfig?.field === "tradeName" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
+                          </span>
+                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("vendor", e)}><div className="w-px h-3/4 bg-slate-300 group-hover:bg-blue-400 transition-colors" /></div>
                         </th>
-                        <th className="p-2 text-right whitespace-nowrap">합계</th>
-                        <th className="p-2 text-center cursor-pointer select-none hover:text-blue-500 transition-colors" onClick={() => toggleSort("code")}>
+                        <th className="p-2 text-right relative select-none" style={{ width: colWidths.total }}>
+                          합계
+                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("total", e)}><div className="w-px h-3/4 bg-slate-300 group-hover:bg-blue-400 transition-colors" /></div>
+                        </th>
+                        <th className="p-2 text-center cursor-pointer select-none hover:text-blue-500 transition-colors" style={{ width: 44 }} onClick={() => toggleSort("code")}>
                           코드{" "}{sortConfig?.field === "code" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
                         </th>
-                        <th className="p-2 text-left cursor-pointer select-none hover:text-blue-500 transition-colors" onClick={() => toggleSort("name")}>
-                          계정과목{" "}{sortConfig?.field === "name" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
+                        <th className="p-2 text-left relative select-none" style={{ width: colWidths.account }}>
+                          <span className="cursor-pointer hover:text-blue-500 transition-colors" onClick={() => toggleSort("name")}>
+                            계정과목{" "}{sortConfig?.field === "name" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
+                          </span>
+                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("account", e)}><div className="w-px h-3/4 bg-slate-300 group-hover:bg-blue-400 transition-colors" /></div>
                         </th>
-                        <th className="p-2 text-center cursor-pointer select-none hover:text-blue-500 transition-colors" onClick={() => toggleSort("tag")}>
+                        <th className="p-2 text-center cursor-pointer select-none hover:text-blue-500 transition-colors" style={{ width: 52 }} onClick={() => toggleSort("tag")}>
                           태그{" "}{sortConfig?.field === "tag" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
                         </th>
-                        <th className="p-2 text-center">신뢰도</th>
-                        <th className="p-2 text-left">업종</th>
+                        <th className="p-2 text-center" style={{ width: 44 }}>신뢰도</th>
+                        <th className="p-2 text-left relative select-none" style={{ width: colWidths.biz }}>
+                          업종
+                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("biz", e)}><div className="w-px h-3/4 bg-slate-300 group-hover:bg-blue-400 transition-colors" /></div>
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="font-bold text-slate-700">
@@ -1053,8 +1226,8 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
                               <input type="checkbox" checked={isChecked} onChange={() => {}} className="w-3.5 h-3.5 rounded accent-blue-600 cursor-pointer" />
                             </td>
                             <td className="p-2 text-slate-300">{origIdx + 1}</td>
-                            <td className="p-2 max-w-[140px] truncate">{c.input.거래처}</td>
-                            <td className="p-2 text-right text-slate-500 whitespace-nowrap">{c.input.합계.toLocaleString()}</td>
+                            <td className="p-2 truncate" style={{ maxWidth: colWidths.vendor }} title={c.input.거래처}>{c.input.거래처}</td>
+                            <td className="p-2 text-right text-slate-500 truncate" style={{ maxWidth: colWidths.total }}>{c.input.합계.toLocaleString()}</td>
                             {/* 코드 */}
                             <td className="p-2 text-center font-black">
                               <span className={confColor}>{eff.code || "-"}</span>
@@ -1117,7 +1290,7 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
                             <td className={`p-2 text-center text-[10px] ${confColor}`}>
                               {c.manualOverride ? "✎" : isAi ? "◇" : c.result.confidence === "high" ? "●" : c.result.confidence === "medium" ? "◐" : "○"}
                             </td>
-                            <td className="p-2 text-[10px] text-slate-400 max-w-[150px] truncate">{bizDisplay}</td>
+                            <td className="p-2 text-[10px] text-slate-400 truncate" style={{ maxWidth: colWidths.biz }}>{bizDisplay}</td>
                           </tr>
                         );
                       })}
@@ -1208,7 +1381,7 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
               </button>
             </div>
           )}
-        </div>
+        </div>}
       </div>
 
       {/* 신규 규칙 확인 모달 */}
