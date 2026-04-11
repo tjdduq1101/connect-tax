@@ -49,7 +49,7 @@ export async function GET() {
       if (!res.ok) {
         const err = await res.text();
         console.error('Notion query failed:', err);
-        return Response.json({ error: '노션 조회 실패' }, { status: res.status });
+        return Response.json({ error: '노션 조회 실패', detail: err }, { status: res.status });
       }
 
       const data = await res.json();
