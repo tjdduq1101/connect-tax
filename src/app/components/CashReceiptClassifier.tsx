@@ -955,42 +955,42 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                   <table className="text-xs w-full" style={{ tableLayout: "fixed" }}>
                     <thead className="bg-gradient-to-b from-slate-50 to-slate-100/80 text-slate-500 font-semibold text-[11px] sticky top-0 z-10 border-b border-slate-200">
                       <tr>
-                        <th className="px-3 py-2.5" style={{ width: 36 }}>
+                        <th className="px-3 py-2.5 align-middle" style={{ width: 36 }}>
                           <input type="checkbox"
                             checked={filteredRows.length > 0 && checkedIndices.size === filteredRows.length}
                             onChange={toggleSelectAll}
                             className="w-3.5 h-3.5 rounded accent-blue-600 cursor-pointer"
                           />
                         </th>
-                        <th className="px-2 py-2.5 text-center text-slate-400" style={{ width: 40 }}>번호</th>
+                        <th className="px-2 py-2.5 text-center text-slate-400 align-middle" style={{ width: 40 }}>번호</th>
                         <th className="px-3 py-2.5 text-left" style={{ width: 72 }}>일자</th>
                         <th className="px-3 py-2.5 text-left relative select-none" style={{ width: colWidths.vendor }}>
                           <span className="cursor-pointer hover:text-blue-500 transition-colors" onClick={() => toggleSort("tradeName")}>
                             거래처{" "}{sortConfig?.field === "tradeName" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
                           </span>
-                          <div className="absolute right-0 top-0 h-full w-1 cursor-col-resize z-10 hover:bg-blue-400 transition-colors" onMouseDown={(e) => startResize("vendor", e)} />
+                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("vendor", e)}><div className="w-px h-3/4 bg-transparent group-hover:bg-blue-400 transition-colors" /></div>
                         </th>
                         <th className="px-3 py-2.5 text-right relative select-none" style={{ width: colWidths.total }}>
                           합계
-                          <div className="absolute right-0 top-0 h-full w-1 cursor-col-resize z-10 hover:bg-blue-400 transition-colors" onMouseDown={(e) => startResize("total", e)} />
+                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("total", e)}><div className="w-px h-3/4 bg-transparent group-hover:bg-blue-400 transition-colors" /></div>
                         </th>
                         <th className="px-3 py-2.5 text-left relative select-none" style={{ width: colWidths.origDebit }}>
                           기존 차변
-                          <div className="absolute right-0 top-0 h-full w-1 cursor-col-resize z-10 hover:bg-blue-400 transition-colors" onMouseDown={(e) => startResize("origDebit", e)} />
+                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("origDebit", e)}><div className="w-px h-3/4 bg-transparent group-hover:bg-blue-400 transition-colors" /></div>
                         </th>
                         <th className="px-2 py-2.5 text-center" style={{ width: 28 }}>→</th>
                         <th className="px-3 py-2.5 text-left relative select-none" style={{ width: colWidths.account }}>
                           <span className="cursor-pointer hover:text-blue-500 transition-colors" onClick={() => toggleSort("name")}>
                             계정과목{" "}{sortConfig?.field === "name" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
                           </span>
-                          <div className="absolute right-0 top-0 h-full w-1 cursor-col-resize z-10 hover:bg-blue-400 transition-colors" onMouseDown={(e) => startResize("account", e)} />
+                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("account", e)}><div className="w-px h-3/4 bg-transparent group-hover:bg-blue-400 transition-colors" /></div>
                         </th>
                         <th className="px-2 py-2.5 text-center cursor-pointer select-none hover:text-blue-500 transition-colors" style={{ width: 52 }} onClick={() => toggleSort("tag")}>
                           구분{" "}{sortConfig?.field === "tag" ? (sortConfig.dir === "asc" ? "▲" : "▼") : <span className="opacity-30">⇅</span>}
                         </th>
                         <th className="px-3 py-2.5 text-left relative select-none" style={{ width: colWidths.biz }}>
                           업종
-                          <div className="absolute right-0 top-0 h-full w-1 cursor-col-resize z-10 hover:bg-blue-400 transition-colors" onMouseDown={(e) => startResize("biz", e)} />
+                          <div className="absolute right-0 top-0 h-full w-3 cursor-col-resize z-10 flex items-center justify-center group" onMouseDown={(e) => startResize("biz", e)}><div className="w-px h-3/4 bg-transparent group-hover:bg-blue-400 transition-colors" /></div>
                         </th>
                       </tr>
                     </thead>
@@ -1019,10 +1019,10 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
 
                         return (
                           <tr key={i} className={`border-t border-slate-200 hover:bg-slate-50/50 transition-colors ${rowBg}`}>
-                            <td className="px-3 py-2" onClick={(e) => { e.stopPropagation(); handleCheckbox(i, origIdx, e); }}>
+                            <td className="px-3 py-2 align-middle" onClick={(e) => { e.stopPropagation(); handleCheckbox(i, origIdx, e); }}>
                               <input type="checkbox" checked={isChecked} onChange={() => {}} className="w-3.5 h-3.5 rounded accent-blue-600 cursor-pointer" />
                             </td>
-                            <td className="px-2 py-2 text-center text-slate-300 tabular-nums">{origIdx + 1}</td>
+                            <td className="px-2 py-2 text-center align-middle text-slate-300 tabular-nums">{origIdx + 1}</td>
                             <td className="px-3 py-2 text-slate-500 truncate">{c.input.일자}</td>
                             <td className="px-3 py-2 truncate" style={{ maxWidth: colWidths.vendor }} title={c.input.거래처}>{c.input.거래처}</td>
                             <td className="px-3 py-2 text-right text-slate-500 tabular-nums truncate" style={{ maxWidth: colWidths.total }}>{c.input.합계.toLocaleString()}</td>
