@@ -792,8 +792,11 @@ export default function MainPage() {
       )}
 
       {activeTab !== 'home' && (
-        <div className="w-full flex justify-center gap-6 p-6">
-          <div className="w-full min-w-0">
+        <div className="w-full min-h-screen p-6" style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '1.5rem' }}>
+          {/* 왼쪽 빈 칸 — 사이드바 폭만큼 균형 */}
+          <div />
+          {/* 중앙 카드 — 원래와 동일하게 자기 max-w 기준으로 표시 */}
+          <div>
             {activeTab === 'regularSalary' && <RegularSalaryCalc onBack={goHome} />}
             {activeTab === 'salary' && <SalaryCalc onBack={goHome} />}
             {activeTab === 'freelancer' && <FreelancerCalc onBack={goHome} />}
@@ -803,7 +806,10 @@ export default function MainPage() {
             {activeTab === 'accountRecommend' && <AccountRecommend onBack={goHome} />}
             {activeTab === 'cashReceiptClassifier' && <CashReceiptClassifier onBack={goHome} />}
           </div>
-          <SideNav activeTab={activeTab} onTabChange={setActiveTab} />
+          {/* 우측 사이드바 */}
+          <div>
+            <SideNav activeTab={activeTab} onTabChange={setActiveTab} />
+          </div>
         </div>
       )}
     </div>
