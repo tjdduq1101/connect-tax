@@ -793,7 +793,7 @@ export default function MainPage() {
 
       {activeTab !== 'home' && (
         <div className="w-full flex justify-center gap-6 p-6">
-          <div className="w-full max-w-md">
+          <div className="w-full min-w-0">
             {activeTab === 'regularSalary' && <RegularSalaryCalc onBack={goHome} />}
             {activeTab === 'salary' && <SalaryCalc onBack={goHome} />}
             {activeTab === 'freelancer' && <FreelancerCalc onBack={goHome} />}
