@@ -26,6 +26,29 @@ function notionHeaders() {
   };
 }
 
+// 페이지 ID인 경우 내부 인라인 데이터베이스 ID를 자동 탐색
+async function resolveDatabaseId(id: string): Promise<string> {
+  // 먼저 데이터베이스로 시도
+  const testRes = await fetch(`${NOTION_API}/databases/${id}`, {
+    headers: notionHeaders(),
+  });
+  if (testRes.ok) return id;
+
+  // 실패하면 페이지의 자식 블록에서 child_database를 찾기
+  const blocksRes = await fetch(`${NOTION_API}/blocks/${id}/children?page_size=100`, {
+    headers: notionHeaders(),
+  });
+  if (!blocksRes.ok) throw new Error('페이지 블록 조회 실패');
+
+  const blocksData = await blocksRes.json();
+  const dbBlock = (blocksData.results || []).find(
+    (block: { type: string }) => block.type === 'child_database'
+  );
+
+  if (dbBlock) return dbBlock.id;
+  throw new Error('페이지 내 데이터베이스를 찾을 수 없습니다. NOTION_DATABASE_ID를 확인해주세요.');
+}
+
 // GET: 노션 DB에서 전체 분류 규칙 조회
 export async function GET() {
   if (!process.env.NOTION_API_KEY || !process.env.NOTION_DATABASE_ID) {
@@ -33,6 +56,8 @@ export async function GET() {
   }
 
   try {
+    const dbId = await resolveDatabaseId(process.env.NOTION_DATABASE_ID);
+
     const allResults: { id: string; properties: Record<string, { type: string; title?: Array<{ plain_text: string }>; rich_text?: Array<{ plain_text: string }>; multi_select?: Array<{ name: string }> }> }[] = [];
     let startCursor: string | undefined = undefined;
 
@@ -40,7 +65,7 @@ export async function GET() {
       const body: Record<string, unknown> = { page_size: 100 };
       if (startCursor) body.start_cursor = startCursor;
 
-      const res = await fetch(`${NOTION_API}/databases/${process.env.NOTION_DATABASE_ID}/query`, {
+      const res = await fetch(`${NOTION_API}/databases/${dbId}/query`, {
         method: 'POST',
         headers: notionHeaders(),
         body: JSON.stringify(body),
@@ -49,7 +74,7 @@ export async function GET() {
       if (!res.ok) {
         const err = await res.text();
         console.error('Notion query failed:', err);
-        return Response.json({ error: '노션 조회 실패', detail: err }, { status: res.status });
+        return Response.json({ error: '노션 조회 실패' }, { status: res.status });
       }
 
       const data = await res.json();
@@ -72,7 +97,8 @@ export async function GET() {
     return Response.json({ rules });
   } catch (err) {
     console.error('Notion query error:', err);
-    return Response.json({ error: '노션 조회 중 오류가 발생했습니다.' }, { status: 500 });
+    const message = err instanceof Error ? err.message : '노션 조회 중 오류가 발생했습니다.';
+    return Response.json({ error: message }, { status: 500 });
   }
 }
 
@@ -83,6 +109,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const dbId = await resolveDatabaseId(process.env.NOTION_DATABASE_ID);
+
     const body = await request.json();
     const { example, code, name, tags, note } = body as {
       example: string;
@@ -100,7 +128,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: notionHeaders(),
       body: JSON.stringify({
-        parent: { database_id: process.env.NOTION_DATABASE_ID },
+        parent: { database_id: dbId },
         properties: {
           '거래처 예시': {
             title: [{ text: { content: example } }],
@@ -131,6 +159,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ success: true, id: newPage.id });
   } catch (err) {
     console.error('Notion create error:', err);
-    return Response.json({ error: '노션 규칙 추가 중 오류가 발생했습니다.' }, { status: 500 });
+    const message = err instanceof Error ? err.message : '노션 규칙 추가 중 오류가 발생했습니다.';
+    return Response.json({ error: message }, { status: 500 });
   }
 }
