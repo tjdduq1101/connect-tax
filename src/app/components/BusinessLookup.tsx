@@ -415,9 +415,9 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
 
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         {/* Header */}
-        <div className="bg-blue-600 p-8 text-center text-white">
+        <div className="bg-violet-600 p-8 text-center text-white">
           <h1 className="text-2xl font-black mb-1">사업자 조회</h1>
-          <p className="text-blue-100 text-xs font-bold uppercase tracking-widest opacity-80">Business Registration Lookup</p>
+          <p className="text-violet-100 text-xs font-bold uppercase tracking-widest opacity-80">Business Registration Lookup</p>
         </div>
 
         <div className="p-6 space-y-5">

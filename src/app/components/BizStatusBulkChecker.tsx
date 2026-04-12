@@ -189,9 +189,9 @@ export default function BizStatusBulkChecker({ onBack }: { onBack: () => void })
 
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         {/* Header */}
-        <div className="bg-purple-600 p-8 text-center text-white">
+        <div className="bg-violet-600 p-8 text-center text-white">
           <h1 className="text-2xl font-black mb-1">사업자상태 대량조회</h1>
-          <p className="text-purple-100 text-xs font-bold uppercase tracking-widest opacity-80">
+          <p className="text-violet-100 text-xs font-bold uppercase tracking-widest opacity-80">
             Business Status Bulk Check
           </p>
         </div>
@@ -229,7 +229,7 @@ export default function BizStatusBulkChecker({ onBack }: { onBack: () => void })
           <button
             onClick={handleCheck}
             disabled={loading || parsed.length === 0}
-            className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white rounded-xl font-black text-sm shadow-lg transition-all active:scale-95"
+            className="w-full py-3 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-300 text-white rounded-xl font-black text-sm shadow-lg transition-all active:scale-95"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">

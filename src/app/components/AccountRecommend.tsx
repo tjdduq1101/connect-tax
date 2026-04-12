@@ -853,9 +853,9 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
 
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         {/* Header */}
-        <div className="bg-blue-600 p-8 text-center text-white">
+        <div className="bg-violet-600 p-8 text-center text-white">
           <h1 className="text-2xl font-black mb-1">카드전표 계정과목 분류</h1>
-          <p className="text-blue-100 text-xs font-bold uppercase tracking-widest opacity-80">
+          <p className="text-violet-100 text-xs font-bold uppercase tracking-widest opacity-80">
             SmartA10 Card Classification
           </p>
         </div>
@@ -864,13 +864,13 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
         <div className="flex border-b border-slate-100">
           <button
             onClick={() => setActiveTab("history")}
-            className={`flex items-center gap-1.5 px-5 py-3 text-sm font-bold transition-colors border-b-2 ${activeTab === "history" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-400 hover:text-slate-600"}`}
+            className={`flex items-center gap-1.5 px-5 py-3 text-sm font-bold transition-colors border-b-2 ${activeTab === "history" ? "border-violet-600 text-violet-600" : "border-transparent text-slate-400 hover:text-slate-600"}`}
           >
-            <span>🕓</span> 히스토리 {historyList.length > 0 && <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full text-[10px]">{historyList.length}</span>}
+            <span>🕓</span> 히스토리 {historyList.length > 0 && <span className="ml-1 px-1.5 py-0.5 bg-violet-100 text-violet-600 rounded-full text-[10px]">{historyList.length}</span>}
           </button>
           <button
             onClick={() => setActiveTab("classify")}
-            className={`flex items-center gap-1.5 px-5 py-3 text-sm font-bold transition-colors border-b-2 ${activeTab === "classify" ? "border-blue-600 text-blue-600" : "border-transparent text-slate-400 hover:text-slate-600"}`}
+            className={`flex items-center gap-1.5 px-5 py-3 text-sm font-bold transition-colors border-b-2 ${activeTab === "classify" ? "border-violet-600 text-violet-600" : "border-transparent text-slate-400 hover:text-slate-600"}`}
           >
             <span>📋</span> 분류하기
           </button>
