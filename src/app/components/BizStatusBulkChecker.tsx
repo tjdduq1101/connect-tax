@@ -31,12 +31,12 @@ function getStatusInfo(code?: string) {
   return { label: '조회불가', bg: '#F5F5F5', color: '#9E9E9E' };
 }
 
-function getTaxTypeLabel(code?: string) {
-  if (code === '01') return '일반과세자';
-  if (code === '02') return '간이과세자';
-  if (code === '03') return '면세사업자';
-  if (code === '04') return '비영리법인';
-  return '-';
+function getTaxTypeInfo(code?: string) {
+  if (code === '01') return { label: '일반과세자', bg: '#DBEAFE', color: '#1D4ED8' };
+  if (code === '02') return { label: '간이과세자', bg: '#FEF9C3', color: '#A16207' };
+  if (code === '03') return { label: '면세사업자', bg: '#F3F4F6', color: '#374151' };
+  if (code === '04') return { label: '비영리법인', bg: '#F3F4F6', color: '#374151' };
+  return null;
 }
 
 function formatBizNo(raw: string) {
@@ -163,7 +163,7 @@ export default function BizStatusBulkChecker({ onBack }: { onBack: () => void })
         '사업장명': r.inputName || '',
         '사업자번호': formatBizNo(r.b_no),
         '사업자상태': status.label,
-        '과세유형': getTaxTypeLabel(r.tax_type_cd),
+        '과세유형': getTaxTypeInfo(r.tax_type_cd)?.label ?? '-',
         '폐업(휴업)일자': showDate ? formatEndDate(r.end_dt) : '',
       };
     });
@@ -304,7 +304,18 @@ export default function BizStatusBulkChecker({ onBack }: { onBack: () => void })
                               {status.label}
                             </span>
                           </td>
-                          <td className="p-3 text-xs font-bold text-slate-600">{getTaxTypeLabel(r.tax_type_cd)}</td>
+                          <td className="p-3">
+                            {(() => {
+                              const t = getTaxTypeInfo(r.tax_type_cd);
+                              if (!t) return <span className="text-xs font-bold text-slate-300">-</span>;
+                              return (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap"
+                                  style={{ background: t.bg, color: t.color }}>
+                                  {t.label}
+                                </span>
+                              );
+                            })()}
+                          </td>
                           <td className="p-3 text-xs font-bold" style={{ color: showDate ? status.color : '#9CA3AF' }}>
                             {showDate ? formatEndDate(r.end_dt) : '-'}
                           </td>
