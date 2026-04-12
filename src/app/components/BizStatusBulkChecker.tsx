@@ -1,6 +1,5 @@
 "use client";
 import { useState } from 'react';
-import * as XLSX from 'xlsx';
 
 // ============================================================
 // Types
@@ -164,29 +163,7 @@ export default function BizStatusBulkChecker({ onBack }: { onBack: () => void })
     }
   };
 
-  const handleExport = () => {
-    const rows = results.map(r => {
-      const status = getStatusInfo(r.b_stt_cd);
-      const showEndDate = r.b_stt_cd === '02' || r.b_stt_cd === '03';
-      const taxInfo = getTaxTypeInfo(r.tax_type_cd, r.tax_type);
-      const isSimple = taxInfo?.label === '간이과세자';
-      return {
-        '사업장명': r.inputName || '',
-        '사업자번호': formatBizNo(r.b_no),
-        '사업자상태': status.label,
-        '과세유형': taxInfo?.label ?? '-',
-        '세금계산서발급': isSimple && isInvoiceIssuer(r) ? 'Y' : '',
-        '간이과세자전환일': isSimple ? (formatDate(r.tax_type_chg_dt) ?? '') : '',
-        '폐업(휴업)일자': showEndDate ? (formatDate(r.end_dt) ?? '') : '',
-      };
-    });
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, '사업자상태조회');
-    XLSX.writeFile(wb, '사업자상태조회.xlsx');
-  };
-
-  const activeCount    = results.filter(r => r.b_stt_cd === '01').length;
+const activeCount    = results.filter(r => r.b_stt_cd === '01').length;
   const suspendedCount = results.filter(r => r.b_stt_cd === '02').length;
   const closedCount    = results.filter(r => r.b_stt_cd === '03').length;
   const unknownCount   = results.filter(r => !r.b_stt_cd).length;
@@ -275,12 +252,6 @@ export default function BizStatusBulkChecker({ onBack }: { onBack: () => void })
                     조회불가 {unknownCount}개
                   </span>
                 )}
-                <button
-                  onClick={handleExport}
-                  className="ml-auto bg-slate-700 hover:bg-slate-800 text-white text-xs font-bold px-4 py-1.5 rounded-full transition-all active:scale-95"
-                >
-                  📥 엑셀 다운로드
-                </button>
               </div>
 
               {/* Table */}
