@@ -16,7 +16,9 @@ interface StatusResult {
   b_stt?: string;
   tax_type_cd?: string;
   tax_type?: string;
-  end_dt?: string; // 폐업일 / 휴업일 (YYYYMMDD)
+  end_dt?: string;          // 폐업일 / 휴업일 (YYYYMMDD)
+  tax_type_chg_dt?: string; // 최근 과세유형 전환일 (YYYYMMDD)
+  invoice_apply_dt?: string;// 세금계산서 발급 적용일 (YYYYMMDD)
   // 입력 정보
   inputName?: string;
 }
@@ -48,9 +50,14 @@ function formatBizNo(raw: string) {
   return `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`;
 }
 
-function formatEndDate(dt?: string) {
-  if (!dt || dt.length !== 8) return '-';
+function formatDate(dt?: string) {
+  if (!dt || dt.length !== 8) return null;
   return `${dt.slice(0, 4)}.${dt.slice(4, 6)}.${dt.slice(6)}`;
+}
+
+// 세금계산서 발급 가능 여부: invoice_apply_dt가 있거나 tax_type 텍스트에 '세금계산서' 포함
+function isInvoiceIssuer(r: StatusResult) {
+  return !!(r.invoice_apply_dt || r.tax_type?.includes('세금계산서'));
 }
 
 /**
@@ -160,13 +167,17 @@ export default function BizStatusBulkChecker({ onBack }: { onBack: () => void })
   const handleExport = () => {
     const rows = results.map(r => {
       const status = getStatusInfo(r.b_stt_cd);
-      const showDate = r.b_stt_cd === '02' || r.b_stt_cd === '03';
+      const showEndDate = r.b_stt_cd === '02' || r.b_stt_cd === '03';
+      const taxInfo = getTaxTypeInfo(r.tax_type_cd, r.tax_type);
+      const isSimple = taxInfo?.label === '간이과세자';
       return {
         '사업장명': r.inputName || '',
         '사업자번호': formatBizNo(r.b_no),
         '사업자상태': status.label,
-        '과세유형': getTaxTypeInfo(r.tax_type_cd, r.tax_type)?.label ?? '-',
-        '폐업(휴업)일자': showDate ? formatEndDate(r.end_dt) : '',
+        '과세유형': taxInfo?.label ?? '-',
+        '세금계산서발급': isSimple && isInvoiceIssuer(r) ? 'Y' : '',
+        '간이과세자전환일': isSimple ? (formatDate(r.tax_type_chg_dt) ?? '') : '',
+        '폐업(휴업)일자': showEndDate ? (formatDate(r.end_dt) ?? '') : '',
       };
     });
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -288,12 +299,16 @@ export default function BizStatusBulkChecker({ onBack }: { onBack: () => void })
                   <tbody>
                     {results.map((r, i) => {
                       const status = getStatusInfo(r.b_stt_cd);
-                      const showDate = r.b_stt_cd === '02' || r.b_stt_cd === '03';
+                      const showEndDate = r.b_stt_cd === '02' || r.b_stt_cd === '03';
+                      const taxInfo = getTaxTypeInfo(r.tax_type_cd, r.tax_type);
+                      const isSimple = taxInfo?.label === '간이과세자';
+                      const invoiceIssuer = isSimple && isInvoiceIssuer(r);
+                      const chgDate = isSimple ? formatDate(r.tax_type_chg_dt) : null;
                       return (
                         <tr
                           key={i}
                           className="border-t border-slate-50 hover:bg-slate-50 transition-colors"
-                          style={showDate ? { background: `${status.bg}60` } : undefined}
+                          style={showEndDate ? { background: `${status.bg}60` } : undefined}
                         >
                           <td className="p-3 text-[10px] font-bold text-slate-300">{i + 1}</td>
                           <td className="p-3 text-xs font-bold text-slate-700">{r.inputName || '-'}</td>
@@ -307,19 +322,31 @@ export default function BizStatusBulkChecker({ onBack }: { onBack: () => void })
                             </span>
                           </td>
                           <td className="p-3">
-                            {(() => {
-                              const t = getTaxTypeInfo(r.tax_type_cd, r.tax_type);
-                              if (!t) return <span className="text-xs font-bold text-slate-300">-</span>;
-                              return (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap"
-                                  style={{ background: t.bg, color: t.color }}>
-                                  {t.label}
+                            {taxInfo ? (
+                              <div className="flex flex-col gap-0.5">
+                                <span
+                                  className="px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap self-start"
+                                  style={{ background: taxInfo.bg, color: taxInfo.color }}
+                                >
+                                  {taxInfo.label}
                                 </span>
-                              );
-                            })()}
+                                {invoiceIssuer && (
+                                  <span className="text-[10px] font-bold text-slate-400 pl-0.5">
+                                    세금계산서 발급사업자
+                                  </span>
+                                )}
+                                {chgDate && (
+                                  <span className="text-[10px] font-bold text-slate-300 pl-0.5">
+                                    전환일 {chgDate}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs font-bold text-slate-300">-</span>
+                            )}
                           </td>
-                          <td className="p-3 text-xs font-bold" style={{ color: showDate ? status.color : '#9CA3AF' }}>
-                            {showDate ? formatEndDate(r.end_dt) : '-'}
+                          <td className="p-3 text-xs font-bold" style={{ color: showEndDate ? status.color : '#9CA3AF' }}>
+                            {showEndDate ? (formatDate(r.end_dt) ?? '-') : '-'}
                           </td>
                         </tr>
                       );
