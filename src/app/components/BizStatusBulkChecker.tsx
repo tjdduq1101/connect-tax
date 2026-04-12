@@ -269,7 +269,7 @@ const activeCount    = results.filter(r => r.b_stt_cd === '01').length;
                       <th className="p-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">사업자번호</th>
                       <th className="p-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">사업자상태</th>
                       <th className="p-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">과세유형</th>
-                      <th className="p-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">폐업(휴업)일자</th>
+                      <th className="p-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">전환일자</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -311,18 +311,13 @@ const activeCount    = results.filter(r => r.b_stt_cd === '01').length;
                                     세금계산서 발급사업자
                                   </span>
                                 )}
-                                {chgDate && (
-                                  <span className="text-[10px] font-bold text-slate-300 pl-0.5">
-                                    전환일 {chgDate}
-                                  </span>
-                                )}
                               </div>
                             ) : (
                               <span className="text-xs font-bold text-slate-300">-</span>
                             )}
                           </td>
-                          <td className="p-3 text-xs font-bold" style={{ color: showEndDate ? status.color : '#9CA3AF' }}>
-                            {showEndDate ? (formatDate(r.end_dt) ?? '-') : '-'}
+                          <td className="p-3 text-xs font-bold" style={{ color: showEndDate ? status.color : chgDate ? '#A16207' : '#9CA3AF' }}>
+                            {showEndDate ? (formatDate(r.end_dt) ?? '-') : (chgDate ?? '-')}
                           </td>
                         </tr>
                       );
