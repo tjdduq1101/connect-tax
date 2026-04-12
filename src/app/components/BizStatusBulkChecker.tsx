@@ -16,7 +16,7 @@ interface StatusResult {
   tax_type_cd?: string;
   tax_type?: string;
   end_dt?: string;          // 폐업일 / 휴업일 (YYYYMMDD)
-  tax_type_chg_dt?: string; // 최근 과세유형 전환일 (YYYYMMDD)
+  tax_type_change_dt?: string; // 최근 과세유형 전환일 (YYYYMMDD)
   invoice_apply_dt?: string;// 세금계산서 발급 적용일 (YYYYMMDD)
   // 입력 정보
   inputName?: string;
@@ -33,12 +33,17 @@ function getStatusInfo(code?: string) {
 }
 
 function getTaxTypeInfo(code?: string, text?: string) {
-  // 코드 우선, 없으면 텍스트로 판별
-  const key = code || (text?.includes('간이') ? '02' : text?.includes('면세') ? '03' : text?.includes('비영리') ? '04' : text ? '01' : undefined);
-  if (key === '01') return { label: '일반과세자', bg: '#DBEAFE', color: '#1D4ED8' };
-  if (key === '02') return { label: '간이과세자', bg: '#FEF9C3', color: '#A16207' };
-  if (key === '03') return { label: '면세사업자', bg: '#F3F4F6', color: '#374151' };
-  if (key === '04') return { label: '비영리법인', bg: '#F3F4F6', color: '#374151' };
+  // 코드 기준 판별 (07 = 간이과세자 세금계산서 발급사업자)
+  if (code === '01') return { label: '일반과세자', bg: '#DBEAFE', color: '#1D4ED8' };
+  if (code === '02') return { label: '간이과세자', bg: '#FEF9C3', color: '#A16207' };
+  if (code === '03') return { label: '면세사업자', bg: '#F3F4F6', color: '#374151' };
+  if (code === '04') return { label: '비영리법인', bg: '#F3F4F6', color: '#374151' };
+  if (code === '07') return { label: '간이과세자', bg: '#FEF9C3', color: '#A16207' };
+  // 코드가 없거나 알 수 없는 경우 텍스트로 판별
+  if (text?.includes('간이'))    return { label: '간이과세자', bg: '#FEF9C3', color: '#A16207' };
+  if (text?.includes('면세'))    return { label: '면세사업자', bg: '#F3F4F6', color: '#374151' };
+  if (text?.includes('비영리'))  return { label: '비영리법인', bg: '#F3F4F6', color: '#374151' };
+  if (text?.includes('일반'))    return { label: '일반과세자', bg: '#DBEAFE', color: '#1D4ED8' };
   return null;
 }
 
@@ -54,9 +59,9 @@ function formatDate(dt?: string) {
   return `${dt.slice(0, 4)}.${dt.slice(4, 6)}.${dt.slice(6)}`;
 }
 
-// 세금계산서 발급 가능 여부: invoice_apply_dt가 있거나 tax_type 텍스트에 '세금계산서' 포함
+// 세금계산서 발급 가능 여부: tax_type_cd === '07' 또는 invoice_apply_dt가 있거나 텍스트에 '세금계산서' 포함
 function isInvoiceIssuer(r: StatusResult) {
-  return !!(r.invoice_apply_dt || r.tax_type?.includes('세금계산서'));
+  return !!(r.tax_type_cd === '07' || r.invoice_apply_dt || r.tax_type?.includes('세금계산서'));
 }
 
 /**
@@ -274,7 +279,7 @@ const activeCount    = results.filter(r => r.b_stt_cd === '01').length;
                       const taxInfo = getTaxTypeInfo(r.tax_type_cd, r.tax_type);
                       const isSimple = taxInfo?.label === '간이과세자';
                       const invoiceIssuer = isSimple && isInvoiceIssuer(r);
-                      const chgDate = isSimple ? formatDate(r.tax_type_chg_dt) : null;
+                      const chgDate = isSimple ? formatDate(r.tax_type_change_dt) : null;
                       return (
                         <tr
                           key={i}

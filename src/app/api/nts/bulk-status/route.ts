@@ -34,9 +34,7 @@ export async function POST(request: NextRequest) {
 
       const data = await res.json();
       const items = data?.data ?? [];
-      // 과세유형 디버깅 - 전체 출력
-      console.log('[bulk-status] raw items:', JSON.stringify(items));
-      allResults.push(...items);
+allResults.push(...items);
     }
 
     return Response.json({ data: allResults });
