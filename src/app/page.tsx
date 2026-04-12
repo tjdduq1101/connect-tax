@@ -5,6 +5,7 @@ import BusinessLookup from './components/BusinessLookup';
 import AccountRecommend from './components/AccountRecommend';
 import CashReceiptClassifier from './components/CashReceiptClassifier';
 import DbUpload from './components/DbUpload';
+import BizStatusBulkChecker from './components/BizStatusBulkChecker';
 
 // --- [공통 함수] ---
 const format = (n: number) => Math.floor(n).toLocaleString();
@@ -658,7 +659,7 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
 // =============================================
 // 메인 페이지
 // =============================================
-type TabKey = 'home' | 'regularSalary' | 'salary' | 'freelancer' | 'wageAllowance' | 'dbUpload' | 'businessLookup' | 'accountRecommend' | 'cashReceiptClassifier';
+type TabKey = 'home' | 'regularSalary' | 'salary' | 'freelancer' | 'wageAllowance' | 'dbUpload' | 'businessLookup' | 'bizStatusBulk' | 'accountRecommend' | 'cashReceiptClassifier';
 type CategoryKey = 'home' | 'labor' | 'tax';
 type MenuGroup = { category: CategoryKey; label: string; color: string; items: { key: TabKey; icon: string; title: string; desc: string }[] };
 
@@ -681,6 +682,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { key: 'dbUpload', icon: '\uD83D\uDDC4\uFE0F', title: '거래처 DB 관리', desc: '사업자 정보 엑셀 업로드 및 DB 구축' },
       { key: 'businessLookup', icon: '\uD83D\uDD0D', title: '사업자 조회', desc: '사업자등록번호 조회 및 업종 분류' },
+      { key: 'bizStatusBulk', icon: '\uD83C\uDFE2', title: '사업자상태 대량조회', desc: '폐업·휴업·과세유형 붙여넣기 일괄 확인' },
       { key: 'accountRecommend', icon: '\uD83D\uDCCB', title: '카드전표 계정과목 분류', desc: '카드매입 엑셀 자동 분류 및 SmartA10 변환' },
       { key: 'cashReceiptClassifier', icon: '\uD83E\uDDFE', title: '현금영수증 계정과목 분류', desc: '현금영수증 매입 엑셀 업종 조회 및 자동 분류' },
     ],
@@ -806,6 +808,7 @@ export default function MainPage() {
               {activeTab === 'businessLookup' && <BusinessLookup onBack={goHome} />}
               {activeTab === 'accountRecommend' && <AccountRecommend onBack={goHome} />}
               {activeTab === 'cashReceiptClassifier' && <CashReceiptClassifier onBack={goHome} />}
+              {activeTab === 'bizStatusBulk' && <BizStatusBulkChecker onBack={goHome} />}
             </div>
             {/* 우측 사이드바 */}
             <div>
