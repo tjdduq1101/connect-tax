@@ -200,7 +200,7 @@ export default function BizStatusBulkChecker({ onBack }: { onBack: () => void })
           {/* Input */}
           <div>
             <label className="block text-[11px] font-bold text-slate-400 ml-1 mb-1">
-              엑셀에서 사업장명 + 사업자번호 열을 선택하여 복사 후 붙여넣기 (Ctrl+V)
+              엑셀에서 사업장명 + 사업자번호 열을 선택하여 복사 후 붙여넣기
             </label>
             <textarea
               className="w-full p-3 bg-slate-50 border-none rounded-xl text-sm font-mono outline-none focus:ring-2 focus:ring-purple-400 transition-all resize-none"
