@@ -31,11 +31,13 @@ function getStatusInfo(code?: string) {
   return { label: '조회불가', bg: '#F5F5F5', color: '#9E9E9E' };
 }
 
-function getTaxTypeInfo(code?: string) {
-  if (code === '01') return { label: '일반과세자', bg: '#DBEAFE', color: '#1D4ED8' };
-  if (code === '02') return { label: '간이과세자', bg: '#FEF9C3', color: '#A16207' };
-  if (code === '03') return { label: '면세사업자', bg: '#F3F4F6', color: '#374151' };
-  if (code === '04') return { label: '비영리법인', bg: '#F3F4F6', color: '#374151' };
+function getTaxTypeInfo(code?: string, text?: string) {
+  // 코드 우선, 없으면 텍스트로 판별
+  const key = code || (text?.includes('간이') ? '02' : text?.includes('면세') ? '03' : text?.includes('비영리') ? '04' : text ? '01' : undefined);
+  if (key === '01') return { label: '일반과세자', bg: '#DBEAFE', color: '#1D4ED8' };
+  if (key === '02') return { label: '간이과세자', bg: '#FEF9C3', color: '#A16207' };
+  if (key === '03') return { label: '면세사업자', bg: '#F3F4F6', color: '#374151' };
+  if (key === '04') return { label: '비영리법인', bg: '#F3F4F6', color: '#374151' };
   return null;
 }
 
@@ -163,7 +165,7 @@ export default function BizStatusBulkChecker({ onBack }: { onBack: () => void })
         '사업장명': r.inputName || '',
         '사업자번호': formatBizNo(r.b_no),
         '사업자상태': status.label,
-        '과세유형': getTaxTypeInfo(r.tax_type_cd)?.label ?? '-',
+        '과세유형': getTaxTypeInfo(r.tax_type_cd, r.tax_type)?.label ?? '-',
         '폐업(휴업)일자': showDate ? formatEndDate(r.end_dt) : '',
       };
     });
@@ -275,7 +277,7 @@ export default function BizStatusBulkChecker({ onBack }: { onBack: () => void })
                 <table className="w-full">
                   <thead className="bg-slate-50">
                     <tr>
-                      <th className="p-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">#</th>
+                      <th className="p-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">번호</th>
                       <th className="p-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">사업장명</th>
                       <th className="p-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">사업자번호</th>
                       <th className="p-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-wider">사업자상태</th>
@@ -306,7 +308,7 @@ export default function BizStatusBulkChecker({ onBack }: { onBack: () => void })
                           </td>
                           <td className="p-3">
                             {(() => {
-                              const t = getTaxTypeInfo(r.tax_type_cd);
+                              const t = getTaxTypeInfo(r.tax_type_cd, r.tax_type);
                               if (!t) return <span className="text-xs font-bold text-slate-300">-</span>;
                               return (
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap"
