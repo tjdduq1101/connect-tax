@@ -10,9 +10,9 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'b_no 배열이 필요합니다.' }, { status: 400 });
   }
 
-  const apiKey = process.env.NTS_API_KEY?.trim();
+  const apiKey = (process.env.DATA_GO_KR_API_KEY || process.env.NTS_API_KEY)?.trim();
   if (!apiKey) {
-    return Response.json({ error: 'NTS API 키가 설정되지 않았습니다.' }, { status: 503 });
+    return Response.json({ error: '공공데이터포털 API 키가 설정되지 않았습니다.' }, { status: 503 });
   }
 
   const url = `https://api.odcloud.kr/api/nts-businessman/v1/status?serviceKey=${encodeURIComponent(apiKey)}`;

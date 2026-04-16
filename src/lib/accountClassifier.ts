@@ -16,7 +16,75 @@ export interface AccountSuggestion {
   name: string;
   tag: string;
   note?: string;
-  fromPdf: boolean;
+  fromRule: boolean;  // true=노션규칙 매칭, false=카테고리 폴백
+}
+
+// ── Notion 규칙 → 매칭용 변환 타입 ──
+export interface MatchingRule {
+  keywords: string[];
+  code: string;
+  name: string;
+  tag: string;
+  note?: string;
+}
+
+export interface NotionRule {
+  id?: string;
+  example: string;
+  code: string;
+  name: string;
+  tags: string[];
+  note: string;
+}
+
+/** Notion example 텍스트에서 키워드를 추출 (법인격·설명문 제거) */
+function extractKeywords(example: string): string[] {
+  // 천단위 쉼표 보호: "4,000" → "4_000" (분리 방지)
+  const protected_ = example.replace(/(\d),(\d)/g, '$1_$2');
+  const parts = protected_.split(/[,،\n]+/);
+  const keywords: string[] = [];
+
+  for (let part of parts) {
+    part = part.trim();
+    if (!part) continue;
+
+    // 설명문 패턴 제거
+    part = part.replace(/\s+등\s+\S+.*$/, '');          // "등 플랫폼", "등 결제대행업체"
+    part = part.replace(/\s*\*\s*.+$/, '');              // "* 4대보험 직원이 있는 경우"
+    part = part.replace(/\s*\(.+경우\).*$/, '');         // "(사업장에 차량이 등록되어 있지 않은 경우)"
+    part = part.replace(/\s*-\s*[\d_]+.*$/, '');         // "- 1만원 이상", "- 4_000원 미만"
+    part = part.replace(/\s*-\s*[A-Z]+.*$/, '');         // "- GS", "- CU"
+
+    // 법인격 접미/접두 제거
+    part = part.replace(/주식회사|유한회사|\(주\)|\(사\)|\(유\)/g, '').trim();
+
+    // 천단위 쉼표 복원
+    part = part.replace(/(\d)_(\d)/g, '$1,$2');
+
+    // 설명문 필터: 너무 길거나 일반적인 서술형은 제외
+    if (part.length > 15 && part.includes(' ')) continue;
+
+    // "주유비", "수선비" 등 거래처명이 아닌 일반명사 설명 제외
+    if (/^(일반|부가세|일반차량)\s/.test(part)) continue;
+
+    if (part) keywords.push(part);
+  }
+
+  return keywords;
+}
+
+/** Notion DB 규칙을 키워드 매칭용 형태로 변환 */
+export function convertNotionRules(rules: NotionRule[]): MatchingRule[] {
+  return rules
+    .filter(r => r.example)
+    .map(r => ({
+      keywords: extractKeywords(r.example),
+      code: r.code,
+      name: r.name,
+      tag: r.tags[0] || '',
+      note: r.note || undefined,
+    }))
+    .filter(r => r.keywords.length > 0);
 }
 
 export interface BusinessConditions {
@@ -41,7 +109,7 @@ export interface ClassificationResult {
   name: string;
   tag: string;
   note?: string;
-  confidence: 'high' | 'medium' | 'low';  // high=PDF규칙, medium=카테고리폴백, low=미분류
+  confidence: 'high' | 'medium' | 'low';  // high=노션규칙, medium=카테고리폴백, low=미분류
 }
 
 // ── 카테고리 분류 규칙 ──
@@ -133,111 +201,6 @@ export const CATEGORY_RULES: { keywords: string[]; label: string; emoji: string;
   { keywords: ['자동차', '카센터', '정비', '중고차', '세차', '자동차매매'], label: '자동차', emoji: '🚗', desc: '자동차관련업입니다', color: '#37474F', bg: '#ECEFF1' },
 ];
 
-// ── 노션 기반 1순위 규칙 (PDF_ACCOUNT_RULES) ──
-export const PDF_ACCOUNT_RULES: { keywords: string[]; code: string; name: string; tag: string; note?: string }[] = [
-  // 1. 플랫폼 (쿠팡, 네이버파이낸셜, 십일번가 등)
-  { keywords: ['쿠팡', '네이버파이낸셜', '십일번가', '11번가'], code: '830', name: '소모품비', tag: '매입', note: '음식점업·전자상거래: 146 상품' },
-
-  // 2. 결제대행업체 (PG사)
-  { keywords: ['케이지이니시스', '갤럭시아머니트리', '나이스페이먼츠', '엔에이치엔한국사이버결제', 'NHN한국사이버결제', '다날', '토스페이먼츠', '케이지모빌리언스', '케이에스넷', '세틀뱅크', '나이스정보통신', '결제대행', '엔에이치엔케이씨피'], code: '830', name: '소모품비', tag: '매입', note: '음식점업·전자상거래: 146 상품 / 유튜브·넷플 구독료 추정=공제' },
-
-  // 3. 마트/슈퍼
-  { keywords: ['이마트', '홈플러스', '코스트코', '이케아', '슈퍼', '마트'], code: '830', name: '소모품비', tag: '매입', note: '음식점업: 146 상품 / 종목=담배: 접대비' },
-
-  // 4. 식자재/식품 판매점
-  { keywords: ['식자재', '한살림', '마켓컬리', '컬리페이', '델리메이'], code: '811', name: '복리후생비', tag: '매입', note: '1인대표: 813 접대비 / 음식점업: 146 상품' },
-
-  // 5. 쇼핑몰
-  { keywords: ['아이파크몰', '스타필드', '아울렛'], code: '830', name: '소모품비', tag: '매입' },
-
-  // 6. 도서인쇄비
-  { keywords: ['교보문고', '영풍문고', '알라딘', '반디앤루니스', '도서'], code: '826', name: '도서인쇄비', tag: '매입', note: '놀숲 등 만화방은 접대비 처리' },
-
-  // 7. 한국정보통신
-  { keywords: ['한국정보통신'], code: '830', name: '소모품비', tag: '매입' },
-
-  // 8. 약국/올리브영
-  { keywords: ['약국', '올리브영'], code: '830', name: '소모품비', tag: '일반' },
-
-  // 9. 편의점 (1만원 기준 분기)
-  { keywords: ['편의점', 'GS25', '지에스25', 'CU', '씨유', '세븐일레븐', '이마트24', '미니스톱'], code: '830', name: '소모품비', tag: '매입', note: '1만원 미만: 812 여비교통비 / 환급시 불공제' },
-
-  // 10. 교통 결제 (로카모빌리티, 티머니 등)
-  { keywords: ['로카모빌리티', '마이비', '비씨카드', '카카오페이', '티머니', '스마트로'], code: '812', name: '여비교통비', tag: '일반' },
-
-  // 11. 일반차량 주유비 (차량 미등록)
-  { keywords: ['주유소', 'SK에너지', '에스케이에너지', 'GS칼텍스', '지에스칼텍스', 'S-OIL', '에쓰오일', '현대오일뱅크', 'LPG', '엘피지', '블루원에너지', '오일뱅크'], code: '812', name: '여비교통비', tag: '일반', note: '차량 등록시 822 차량유지비' },
-
-  // 14. 주차료/하이패스/톨게이트
-  { keywords: ['주차', '하이패스', '톨게이트', '파킹'], code: '812', name: '여비교통비', tag: '일반' },
-
-  // 15. 휴게소
-  { keywords: ['휴게소'], code: '812', name: '여비교통비', tag: '일반', note: '건설업: 공제 612 여비' },
-
-  // 16. 한국도로공사/구청
-  { keywords: ['한국도로공사', '도로공사', '구청'], code: '812', name: '여비교통비', tag: '일반' },
-
-  // 17. 식비/커피숍 (직원 유무로 분기) — 기본: 복리후생비
-  { keywords: ['식당', '음식점', '카페', '커피', '베이커리', '빵집'], code: '811', name: '복리후생비', tag: '매입', note: '1인대표: 813 접대비(일반)' },
-
-  // 18. 주점업
-  { keywords: ['주점', '술집', '포차', '호프', '소주방'], code: '813', name: '접대비', tag: '일반', note: '5인 이상(4대보험 다수): 복리후생비 검토 / 환급시 접대비' },
-
-  // 19. 골프장
-  { keywords: ['골프장', '골프', '컨트리클럽', 'CC', '씨씨'], code: '813', name: '접대비', tag: '일반' },
-
-  // 19-1. 사우나/목욕탕/찜질방
-  { keywords: ['사우나', '목욕탕', '찜질방', '스파', '온천'], code: '813', name: '접대비', tag: '일반' },
-
-  // 19-2. 레저/워터파크/랜드
-  { keywords: ['워터파크', '랜드', '테마파크', '놀이공원', '리조트'], code: '813', name: '접대비', tag: '일반' },
-
-  // 20. 모텔/호텔
-  { keywords: ['모텔', '호텔'], code: '813', name: '접대비', tag: '일반', note: '건설업: 매입(여비교통비)' },
-
-  // 21. 백화점
-  { keywords: ['백화점', '롯데백화점', '현대백화점', '신세계백화점'], code: '813', name: '접대비', tag: '일반', note: '사업용 가능성 확인 / 납부세액 증가시 50만원 미만만 공제' },
-
-  // 22. 보험료
-  { keywords: ['보험', '손해보험', '생명보험', '보험료'], code: '821', name: '보험료', tag: '일반' },
-
-  // 23. 인터넷 사용료
-  { keywords: ['인터넷', 'SK브로드밴드', '에스케이브로드밴드', 'KT인터넷', '케이티인터넷', 'LG유플러스', '엘지유플러스'], code: '814', name: '통신비', tag: '매입', note: '세금계산서 중복 주의 → 카드전송제외 / 사업자주소=집: 전송제외' },
-
-  // 24. 휴대폰 사용료
-  { keywords: ['휴대폰사용료', '휴대폰'], code: '814', name: '통신비', tag: '일반' },
-
-  // 25. 우정사업본부 (금액 기준 분기)
-  { keywords: ['우정사업본부', '우체국'], code: '814', name: '통신비', tag: '일반', note: '4,000원 이상: 824 운반비(매입)' },
-
-  // 26. GS네트웍스/BGF네트웍스 (편의점 택배)
-  { keywords: ['지에스네트웍스', 'GS네트웍스', '비지에프네트웍스', 'BGF네트웍스'], code: '824', name: '운반비', tag: '매입', note: '도소매·제조업: 공제 / 그 외 업종: 불공' },
-
-  // 27. 도시가스
-  { keywords: ['도시가스', '가스공사'], code: '815', name: '수도광열비', tag: '일반' },
-
-  // 28. 한국전력공사
-  { keywords: ['한국전력', '전력공사', '한전'], code: '816', name: '전력비', tag: '매입', note: '세금계산서 중복 주의 → 카드전송제외 / 사업자주소=집: 전송제외' },
-
-  // 29. 인증서
-  { keywords: ['인증서', '공인인증'], code: '831', name: '지급수수료', tag: '매입' },
-
-  // 30. 한국신용카드결제
-  { keywords: ['한국신용카드결제'], code: '831', name: '지급수수료', tag: '일반' },
-
-  // 31. 소프트웨어개발(정보통신업)
-  { keywords: ['소프트웨어개발', '소프트웨어'], code: '831', name: '지급수수료', tag: '매입' },
-
-  // 32. 일반 카드사
-  { keywords: ['신한카드', '삼성카드', '현대카드', '국민카드', 'KB카드', '케이비카드', '롯데카드', '하나카드', '우리카드', 'BC카드', '비씨카드', '카드사'], code: '831', name: '지급수수료', tag: '일반', note: '고액거래: 거주지 관리비 가능성 → 전송제외 주의' },
-
-  // 33. 병원/금융결제원/헬스장 → 전송제외
-  { keywords: ['병원', '의원', '치과', '한의원', '헬스장', '피트니스', '금융결제원'], code: '', name: '', tag: '전송제외', note: '법인: 단기대여금 가능' },
-
-  // 34. 사무용품점 (다이소 등)
-  { keywords: ['다이소', '아성다이소'], code: '829', name: '사무용품비', tag: '매입' },
-];
-
 // ── 카테고리 기반 폴백 (DB 차변 참고) ──
 export const CATEGORY_ACCOUNT_MAP: Record<string, { code: string; name: string; tag: string }> = {
   '세무사': { code: '831', name: '지급수수료', tag: '매입' },
@@ -249,7 +212,7 @@ export const CATEGORY_ACCOUNT_MAP: Record<string, { code: string; name: string; 
   '감정평가': { code: '831', name: '지급수수료', tag: '매입' },
   '건축설계': { code: '831', name: '지급수수료', tag: '매입' },
   '컨설팅': { code: '831', name: '지급수수료', tag: '매입' },
-  '광고': { code: '830', name: '소모품비', tag: '매입' },
+  '광고': { code: '833', name: '광고선전비', tag: '매입' },
   '음식점': { code: '811', name: '복리후생비', tag: '매입' },
   '주점': { code: '813', name: '접대비', tag: '일반' },
   '숙박': { code: '813', name: '접대비', tag: '일반' },
@@ -296,6 +259,8 @@ export const CATEGORY_ACCOUNT_MAP: Record<string, { code: string; name: string; 
 
 // ── 계정과목명 → 코드 변환 (SmartA10 업로드용) ──
 export const ACCOUNT_NAME_TO_CODE: Record<string, string> = {
+  '상품': '146',
+  '원재료': '153',
   '미지급금': '253',
   '현금': '101',
   '보통예금': '103',
@@ -340,6 +305,8 @@ export const ACCOUNT_NAME_TO_CODE: Record<string, string> = {
 
 // ── 코드 → 계정과목 매핑 (공유) ──
 export const CODE_TO_ACCOUNT: Record<string, { name: string; tag: string }> = {
+  "146": { name: "상품", tag: "매입" },
+  "153": { name: "원재료", tag: "매입" },
   "530": { name: "소모품비", tag: "매입" },
   "630": { name: "소모품비", tag: "매입" },
   "730": { name: "소모품비", tag: "매입" },
@@ -383,8 +350,9 @@ export const NAME_TO_CODE: Record<string, string> = {
   "경상연구개발비": "823", "운반비": "824", "교육훈련비": "825",
   "도서인쇄비": "826", "회의비": "827", "포장비": "828",
   "사무용품비": "829", "지급수수료": "831", "보관료": "832",
-  "광고선전비": "833", "판매촉진비": "834", "대손상각비": "835",
+  "소모품비": "830", "광고선전비": "833", "판매촉진비": "834", "대손상각비": "835",
   "건물관리비": "837", "임원급여": "801", "직원급여": "802", "상여금": "803",
+  "상품": "146", "원재료": "153",
 };
 
 // ── 공통 함수 ──
@@ -398,28 +366,28 @@ export function classifyBusiness(text: string): CategoryInfo {
   return { label: '일반사업체', emoji: '🏢', desc: '사업체입니다', color: '#6366F1', bg: '#EEF2FF' };
 }
 
-export function getAccountSuggestion(text: string, categoryLabel: string): AccountSuggestion | null {
+export function getAccountSuggestion(text: string, categoryLabel: string, rules: MatchingRule[] = []): AccountSuggestion | null {
   const lower = text.toLowerCase();
-  // 1순위: PDF 규칙 (키워드 매칭)
-  for (const rule of PDF_ACCOUNT_RULES) {
+  // 1순위: 노션 규칙 (키워드 매칭)
+  for (const rule of rules) {
     if (rule.keywords.some((kw) => lower.includes(kw.toLowerCase()))) {
-      return { code: rule.code, name: rule.name, tag: rule.tag, note: rule.note, fromPdf: true };
+      return { code: rule.code, name: rule.name, tag: rule.tag, note: rule.note, fromRule: true };
     }
   }
   // 2순위: 카테고리 폴백 — *확인필요
   const catAccount = CATEGORY_ACCOUNT_MAP[categoryLabel];
   if (catAccount) {
-    return { code: catAccount.code, name: catAccount.name, tag: catAccount.tag, fromPdf: false };
+    return { code: catAccount.code, name: catAccount.name, tag: catAccount.tag, fromRule: false };
   }
   return null;
 }
 
 // ── 조건별 계정과목 분류 (엑셀 행 기반) ──
-export function classifyTransaction(row: TransactionRow, conditions: BusinessConditions): ClassificationResult {
+export function classifyTransaction(row: TransactionRow, conditions: BusinessConditions, rules: MatchingRule[] = []): ClassificationResult {
   const text = [row.tradeName, row.businessType, row.sector].filter(Boolean).join(' ').toLowerCase();
 
-  // 1순위: PDF 규칙 매칭
-  for (const rule of PDF_ACCOUNT_RULES) {
+  // 1순위: 노션 규칙 매칭
+  for (const rule of rules) {
     if (rule.keywords.some((kw) => text.includes(kw.toLowerCase()))) {
       // 조건별 분기 적용
       const adjusted = applyConditions(rule, row, conditions);
@@ -449,15 +417,26 @@ function applyConditions(
 ): { code: string; name: string; tag: string; note?: string } {
   const text = [row.tradeName, row.businessType, row.sector].filter(Boolean).join(' ').toLowerCase();
 
-  // 플랫폼/PG사/마트: 업종별 분기 (상품 or 원재료) — 최우선 체크
+  // 플랫폼/PG사: 업종별 분기 (상품 or 원재료)
   if (['음식점업', '도소매', '전자상거래', '제조업'].includes(conditions.businessType)) {
-    const platformKws = ['쿠팡', '네이버파이낸셜', '십일번가', '11번가', '케이지이니시스', '갤럭시아머니트리', '나이스페이먼츠', '이마트', '홈플러스', '코스트코', '엔에이치엔케이씨피'];
+    const platformKws = ['쿠팡', '네이버파이낸셜', '십일번가', '11번가', '케이지이니시스', '갤럭시아머니트리', '나이스페이먼츠', '엔에이치엔케이씨피', '다날', '토스페이먼츠', '케이지모빌리언스', '케이에스넷', '세틀뱅크', '나이스정보통신'];
     if (platformKws.some(kw => text.includes(kw.toLowerCase()))) {
       if (conditions.businessType === '제조업') {
         return { code: '153', name: '원재료', tag: '매입', note: '제조업 원재료' };
       }
       return { code: '146', name: '상품', tag: '매입', note: '도소매/음식점업 상품' };
     }
+  }
+
+  // 마트/슈퍼: 음식점업·제조업만 상품/원재료, 그 외는 기본값(소모품비)
+  if (['이마트', '홈플러스', '코스트코', '슈퍼', '마트'].some(kw => text.includes(kw)) && !text.includes('이마트24')) {
+    if (conditions.businessType === '음식점업') {
+      return { code: '146', name: '상품', tag: '매입', note: '음식점업 상품' };
+    }
+    if (conditions.businessType === '제조업') {
+      return { code: '153', name: '원재료', tag: '매입', note: '제조업 원재료' };
+    }
+    return { code: rule.code, name: rule.name, tag: rule.tag, note: rule.note };
   }
 
   // 식비/커피숍: 직원 유무로 분기

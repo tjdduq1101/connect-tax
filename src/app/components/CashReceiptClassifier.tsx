@@ -4,12 +4,14 @@ import * as XLSX from "xlsx";
 import {
   classifyTransaction,
   classifyBusiness,
+  convertNotionRules,
   CATEGORY_ACCOUNT_MAP,
   CODE_TO_ACCOUNT,
   NAME_TO_CODE,
   type TransactionRow,
   type BusinessConditions,
   type ClassificationResult,
+  type MatchingRule,
 } from "@/lib/accountClassifier";
 
 // ============================================================
@@ -264,7 +266,8 @@ async function lookupBusinessInfo(tradeName: string, code: string): Promise<Busi
 function classifyCashReceipt(
   row: CashReceiptRow,
   bizInfo: BusinessInfo,
-  conditions: BusinessConditions
+  conditions: BusinessConditions,
+  rules: MatchingRule[] = []
 ): ClassificationResult {
   // classifyTransaction에 업태/종목 정보 전달
   const txRow: TransactionRow = {
@@ -276,7 +279,7 @@ function classifyCashReceipt(
     taxType: row.유형,
   };
 
-  const result = classifyTransaction(txRow, conditions);
+  const result = classifyTransaction(txRow, conditions, rules);
 
   if (result.confidence !== "low") {
     return result;
@@ -403,6 +406,20 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
   // 업종 조회 캐시 (거래처명 → BusinessInfo)
   const bizCacheRef = useRef<Map<string, BusinessInfo>>(new Map());
 
+  // 노션 규칙 (마운트 시 fetch)
+  const notionRulesRef = useRef<MatchingRule[]>([]);
+
+  useEffect(() => {
+    fetch("/api/notion/rules")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.rules) {
+          notionRulesRef.current = convertNotionRules(data.rules);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // 열 너비 (드래그 리사이즈)
   const [colWidths, setColWidths] = useState({ vendor: 140, total: 90, origDebit: 100, account: 160, biz: 110 });
   const resizingRef = useRef<{ col: keyof typeof colWidths; startX: number; startWidth: number } | null>(null);
@@ -519,7 +536,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
       // 분류 실행
       const classifiedRows: ClassifiedCashRow[] = rows.map((input) => {
         const bizInfo = cache.get(input.거래처) || { sector: "", type: "", source: "" as const };
-        const result = classifyCashReceipt(input, bizInfo, conditions);
+        const result = classifyCashReceipt(input, bizInfo, conditions, notionRulesRef.current);
         const changed = validateExisting(input, result);
         return {
           input,
@@ -543,7 +560,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
     if (classified.length === 0) return;
     const results = classified.map((c) => {
       const bizInfo = bizCacheRef.current.get(c.input.거래처) || { sector: "", type: "", source: "" as const };
-      const result = classifyCashReceipt(c.input, bizInfo, conditions);
+      const result = classifyCashReceipt(c.input, bizInfo, conditions, notionRulesRef.current);
       const changed = validateExisting(c.input, result);
       return { ...c, result, bizInfo, changed };
     });

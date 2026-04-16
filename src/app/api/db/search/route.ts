@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
         .from('businesses')
         .select('*')
         .eq('b_no', cleaned)
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (error || !data) return Response.json({ data: null });
       return Response.json({ data });

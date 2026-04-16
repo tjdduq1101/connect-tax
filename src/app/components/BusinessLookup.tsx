@@ -4,8 +4,10 @@ import * as XLSX from 'xlsx';
 import {
   classifyBusiness as classifyBusinessText,
   getAccountSuggestion as getAccountSuggestionText,
+  convertNotionRules,
   type CategoryInfo,
   type AccountSuggestion,
+  type MatchingRule,
 } from '@/lib/accountClassifier';
 
 // ============================================================
@@ -41,9 +43,9 @@ function classifyBusinessLocal(data: BusinessData, naverCategory?: string): Cate
   return classifyBusinessText(text);
 }
 
-function getAccountSuggestionLocal(data: BusinessData, categoryLabel: string): AccountSuggestion | null {
+function getAccountSuggestionLocal(data: BusinessData, categoryLabel: string, rules: MatchingRule[]): AccountSuggestion | null {
   const text = [data.b_nm, data.b_type, data.b_sector].filter(Boolean).join(' ');
-  return getAccountSuggestionText(text, categoryLabel);
+  return getAccountSuggestionText(text, categoryLabel, rules);
 }
 
 function getStatusInfo(code?: string) {
@@ -93,6 +95,22 @@ async function fetchBusinessStatus(bno: string): Promise<BusinessData | null> {
   if (!res.ok) return null;
   const json = await res.json();
   return json.data || null;
+}
+
+async function fetchPublicDataInfo(bno: string): Promise<BusinessData | null> {
+  const cleaned = bno.replace(/-/g, '');
+  const res = await fetch(`/api/data-go-kr/business-info?bno=${encodeURIComponent(cleaned)}`);
+  if (!res.ok) return null;
+  const json = await res.json();
+  if (!json.data || !json.data.b_nm) return null;
+  return {
+    b_no: cleaned,
+    b_nm: json.data.b_nm,
+    b_sector: json.data.b_sector,
+    b_type: json.data.b_type,
+    b_adr: json.data.b_adr,
+    p_nm: json.data.p_nm,
+  };
 }
 
 function normalizeName(name: string): string {
@@ -338,9 +356,14 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState('');
   const [dbCount, setDbCount] = useState(0);
   const [manualName, setManualName] = useState('');
+  const [matchingRules, setMatchingRules] = useState<MatchingRule[]>([]);
 
   useEffect(() => {
     getServerDbStats().then((s) => setDbCount(s.count || 0)).catch(() => {});
+    fetch('/api/notion/rules')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.rules) setMatchingRules(convertNotionRules(data.rules)); })
+      .catch(() => {});
   }, []);
 
   const handleSearch = async () => {
@@ -359,11 +382,27 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
         }
         return;
       }
-      // 2순위: 국세청 공공데이터 API
+      // 2순위: 공공데이터 API (금융위원회 + 국민연금)
+      const publicData = await fetchPublicDataInfo(input);
+      if (publicData) {
+        // 국세청 상태도 병렬로 조회
+        const nts = await fetchBusinessStatus(input);
+        const merged = {
+          ...publicData,
+          b_stt_cd: nts?.b_stt_cd,
+          tax_type_cd: nts?.tax_type_cd,
+        };
+        setResult(merged); setResultSource('public');
+        if (merged.b_nm) {
+          setNaverLoading(true);
+          searchNaver(merged.b_nm).then((items) => setNaverInfo(items)).catch(() => {}).finally(() => setNaverLoading(false));
+        }
+        return;
+      }
+      // 3순위: 국세청 공공데이터 API (상태만)
       const nts = await fetchBusinessStatus(input);
       if (nts) {
         setResult(nts); setResultSource('api');
-        // NTS 결과에 상호명이 있으면 네이버 검색 자동 실행
         if (nts.b_nm) {
           setNaverLoading(true);
           searchNaver(nts.b_nm).then((items) => setNaverInfo(items)).catch(() => {}).finally(() => setNaverLoading(false));
@@ -487,10 +526,10 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
                   </span>
                 )}
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{
-                  background: resultSource === 'db' ? '#EEF2FF' : '#E0F7FA',
-                  color: resultSource === 'db' ? '#4338CA' : '#00695C',
+                  background: resultSource === 'db' ? '#EEF2FF' : resultSource === 'public' ? '#E8F5E9' : '#E0F7FA',
+                  color: resultSource === 'db' ? '#4338CA' : resultSource === 'public' ? '#2E7D32' : '#00695C',
                 }}>
-                  {resultSource === 'db' ? '🗄️ 공유DB' : '🌐 국세청'}
+                  {resultSource === 'db' ? '🗄️ 공유DB' : resultSource === 'public' ? '🏛️ 공공데이터' : '🌐 국세청'}
                 </span>
               </div>
 
@@ -530,7 +569,7 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
                 {result.b_adr && <InfoRow icon="📍" label="주소" value={result.b_adr} />}
                 {result.start_dt && <InfoRow icon="📅" label="개업일" value={formatDate(result.start_dt)} />}
                 {(() => {
-                  const acct = getAccountSuggestionLocal(result, category.label);
+                  const acct = getAccountSuggestionLocal(result, category.label, matchingRules);
                   if (!acct) return null;
                   const tagColor = acct.tag === '매입' ? '#7C3AED' : acct.tag === '전송제외' ? '#DC2626' : '#6B7280';
                   const tagBg = acct.tag === '매입' ? '#F3E8FF' : acct.tag === '전송제외' ? '#FEE2E2' : '#F3F4F6';
@@ -546,7 +585,7 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: tagBg, color: tagColor }}>
                             {acct.tag}
                           </span>
-                          {!acct.fromPdf && (
+                          {!acct.fromRule && (
                             <span className="text-[10px] font-bold text-amber-500">*확인필요</span>
                           )}
                         </div>
@@ -559,7 +598,7 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
                 })()}
               </div>
 
-              {resultSource === 'api' && !result.b_nm && (
+              {(resultSource === 'api' || resultSource === 'public') && !result.b_nm && (
                 <div className="space-y-3">
                   <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
                     <p className="text-[11px] text-blue-700 font-bold mb-2">💡 상호명을 입력하면 네이버에서 추가 정보를 검색합니다</p>

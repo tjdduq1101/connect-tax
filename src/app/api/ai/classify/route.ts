@@ -47,6 +47,10 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: '분류할 항목이 없습니다.' }, { status: 400 });
     }
 
+    if (items.length > 50) {
+      return Response.json({ error: '한 번에 최대 50건까지 분류할 수 있습니다.' }, { status: 400 });
+    }
+
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
@@ -88,9 +92,25 @@ ${itemsText}
     const result = await model.generateContent(prompt);
     const text = result.response.text();
 
-    // JSON 파싱 (코드블록 마크다운 제거)
-    const jsonStr = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const parsed = JSON.parse(jsonStr) as { results: AiClassifyResult[] };
+    // JSON 파싱 (코드블록 마크다운 제거 + 최외곽 JSON 객체 추출)
+    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.error('AI response is not valid JSON:', cleaned);
+      return Response.json({ error: 'AI 응답을 파싱할 수 없습니다.' }, { status: 502 });
+    }
+
+    let parsed: { results: AiClassifyResult[] };
+    try {
+      parsed = JSON.parse(jsonMatch[0]) as { results: AiClassifyResult[] };
+    } catch (parseErr) {
+      console.error('JSON parse failed:', parseErr, 'Raw:', jsonMatch[0]);
+      return Response.json({ error: 'AI 응답 JSON 파싱 실패' }, { status: 502 });
+    }
+
+    if (!parsed.results || !Array.isArray(parsed.results)) {
+      return Response.json({ error: 'AI 응답 형식이 올바르지 않습니다.' }, { status: 502 });
+    }
 
     return Response.json(parsed);
   } catch (err) {

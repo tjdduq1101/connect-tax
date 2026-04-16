@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import {
   classifyTransaction,
   classifyBusiness,
+  convertNotionRules,
   CATEGORY_ACCOUNT_MAP,
   ACCOUNT_NAME_TO_CODE,
   CODE_TO_ACCOUNT,
@@ -11,6 +12,7 @@ import {
   type TransactionRow,
   type BusinessConditions,
   type ClassificationResult,
+  type MatchingRule,
 } from "@/lib/accountClassifier";
 
 // ============================================================
@@ -300,7 +302,8 @@ function parseInputExcel(buffer: ArrayBuffer): InputRow[] {
 function classifyRow(
   input: InputRow,
   bizInfo: BusinessInfo,
-  conditions: BusinessConditions
+  conditions: BusinessConditions,
+  rules: MatchingRule[] = []
 ): ClassificationResult {
   // 업태/종목: 엑셀 데이터 우선, 없으면 DB/네이버 데이터 사용
   const businessType = input.업태 || bizInfo.sector;
@@ -315,7 +318,7 @@ function classifyRow(
     taxType: input.유형,
   };
 
-  const result = classifyTransaction(txRow, conditions);
+  const result = classifyTransaction(txRow, conditions, rules);
 
   if (result.confidence !== "low") {
     return result;
@@ -425,6 +428,23 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
 
   // DB/네이버 조회 캐시 (거래처명 → BusinessInfo)
   const bizCacheRef = useRef<Map<string, BusinessInfo>>(new Map());
+
+  // 노션 규칙 (마운트 시 fetch)
+  const [notionRules, setNotionRules] = useState<MatchingRule[]>([]);
+  const notionRulesRef = useRef<MatchingRule[]>([]);
+
+  useEffect(() => {
+    fetch("/api/notion/rules")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.rules) {
+          const converted = convertNotionRules(data.rules);
+          setNotionRules(converted);
+          notionRulesRef.current = converted;
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // 열 너비 (드래그 리사이즈)
   const [colWidths, setColWidths] = useState({ vendor: 160, total: 90, account: 160, biz: 120 });
@@ -567,7 +587,7 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
       // 분류 실행
       const classifiedRows: ClassifiedRow[] = rows.map((input) => {
         const bizInfo = cache.get(input.거래처) || { sector: "", type: "", source: "" as const };
-        const result = classifyRow(input, bizInfo, conditions);
+        const result = classifyRow(input, bizInfo, conditions, notionRulesRef.current);
         return { input, result, bizInfo };
       });
 
@@ -592,7 +612,7 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
     if (classified.length === 0) return;
     const results = classified.map((c) => {
       const bizInfo = bizCacheRef.current.get(c.input.거래처) || { sector: "", type: "", source: "" as const };
-      const result = classifyRow(c.input, bizInfo, conditions);
+      const result = classifyRow(c.input, bizInfo, conditions, notionRulesRef.current);
       return { input: c.input, result, bizInfo };
     });
     setClassified(results);
