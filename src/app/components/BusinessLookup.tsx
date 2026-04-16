@@ -126,9 +126,23 @@ function isNameMatch(title: string, query: string): boolean {
   return t === q || t.startsWith(q) || q.startsWith(t);
 }
 
-async function searchNaver(name: string): Promise<NaverResult[]> {
-  // 법인 여부 판별: 주식회사/(주)/유한회사 등이 포함되어 있는지 확인
-  const isCorp = /주식회사|\(주\)|유한회사|\(유\)|유한책임회사/.test(name);
+// 사업자번호 형식으로 법인 여부 판별
+// 중간 2자리 80~89 = 국내법인, 90~99 = 외국법인
+function isCorpFromBno(bno: string): boolean {
+  const cleaned = bno.replace(/-/g, '');
+  if (cleaned.length !== 10) return false;
+  const mid = parseInt(cleaned.slice(3, 5), 10);
+  return mid >= 80 && mid <= 99;
+}
+
+// 상호명에 법인격 표시가 있는지 확인
+function hasLegalEntityPrefix(name: string): boolean {
+  return /주식회사|\(주\)|유한회사|\(유\)|유한책임회사|합명회사|합자회사|사단법인|재단법인|사회적협동조합|협동조합/.test(name);
+}
+
+async function searchNaver(name: string, isCorpHint?: boolean): Promise<NaverResult[]> {
+  // 법인 여부 판별: 이름에 법인격 포함 또는 사업자번호 기반 힌트
+  const isCorp = isCorpHint || /주식회사|\(주\)|유한회사|\(유\)|유한책임회사/.test(name);
   // 순수 상호명 추출 (법인격 제거)
   const pureName = name.replace(/(주식회사|유한회사|유한책임회사|\(주\)|\(유\)|\(|\))/g, '').trim();
   if (!pureName) return [];
@@ -385,14 +399,26 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
     if (digits.length !== 10) { setError('사업자등록번호 10자리를 정확히 입력해주세요.'); return; }
 
     setLoading(true); setError(''); setResult(null); setResultSource(''); setNaverInfo([]); setManualName('');
+    const isCorp = isCorpFromBno(input);
     try {
       // 1순위: 공유 DB
       const dbResult = await searchServerDb(input);
       if (dbResult) {
+        // 법인인데 DB에 법인격 없이 저장된 경우 → 공공API로 이름 보강 시도
+        if (isCorp && !hasLegalEntityPrefix(dbResult.b_nm || '')) {
+          const publicData = await fetchPublicDataInfo(input);
+          if (publicData?.b_nm && hasLegalEntityPrefix(publicData.b_nm)) {
+            dbResult.b_nm = publicData.b_nm;
+          }
+          if (!dbResult.b_sector && publicData?.b_sector) dbResult.b_sector = publicData.b_sector;
+          if (!dbResult.b_type && publicData?.b_type) dbResult.b_type = publicData.b_type;
+          if (!dbResult.b_adr && publicData?.b_adr) dbResult.b_adr = publicData.b_adr;
+          if (!dbResult.p_nm && publicData?.p_nm) dbResult.p_nm = publicData.p_nm;
+        }
         setResult(dbResult); setResultSource('db');
         if (dbResult.b_nm) {
           setNaverLoading(true);
-          searchNaver(dbResult.b_nm).then((items) => setNaverInfo(items)).catch(() => {}).finally(() => setNaverLoading(false));
+          searchNaver(dbResult.b_nm, isCorp).then((items) => setNaverInfo(items)).catch(() => {}).finally(() => setNaverLoading(false));
         }
         return;
       }
@@ -422,7 +448,7 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
         setResultSource(publicData ? 'public' : 'api');
         if (merged.b_nm) {
           setNaverLoading(true);
-          searchNaver(merged.b_nm).then((items) => setNaverInfo(items)).catch(() => {}).finally(() => setNaverLoading(false));
+          searchNaver(merged.b_nm, isCorp).then((items) => setNaverInfo(items)).catch(() => {}).finally(() => setNaverLoading(false));
         }
         return;
       }
@@ -445,7 +471,7 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
     setError('');
     setNaverLoading(true);
     try {
-      const items = await searchNaver(name);
+      const items = await searchNaver(name, isCorpFromBno(input));
       setNaverInfo(items);
     } catch { /* ignore */ } finally { setNaverLoading(false); }
   };
