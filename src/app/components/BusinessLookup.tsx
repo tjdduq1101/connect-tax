@@ -102,14 +102,17 @@ async function fetchPublicDataInfo(bno: string): Promise<BusinessData | null> {
   const res = await fetch(`/api/data-go-kr/business-info?bno=${encodeURIComponent(cleaned)}`);
   if (!res.ok) return null;
   const json = await res.json();
-  if (!json.data || !json.data.b_nm) return null;
+  if (!json.data) return null;
+  // b_nm이 없어도 업태/업종/주소 등 보조 데이터가 있으면 반환
+  const d = json.data;
+  if (!d.b_nm && !d.b_sector && !d.b_type && !d.b_adr) return null;
   return {
     b_no: cleaned,
-    b_nm: json.data.b_nm,
-    b_sector: json.data.b_sector,
-    b_type: json.data.b_type,
-    b_adr: json.data.b_adr,
-    p_nm: json.data.p_nm,
+    b_nm: d.b_nm || '',
+    b_sector: d.b_sector || '',
+    b_type: d.b_type || '',
+    b_adr: d.b_adr || '',
+    p_nm: d.p_nm || '',
   };
 }
 
@@ -124,23 +127,34 @@ function isNameMatch(title: string, query: string): boolean {
 }
 
 async function searchNaver(name: string): Promise<NaverResult[]> {
-  const cleaned = name.replace(/(주식회사|유한회사|유한책임회사|\(주\)|\(유\)|\(|\))/g, '').trim();
-  if (!cleaned) return [];
-  const res = await fetch(`/api/naver/search?q=${encodeURIComponent(cleaned)}`);
+  // 법인 여부 판별: 주식회사/(주)/유한회사 등이 포함되어 있는지 확인
+  const isCorp = /주식회사|\(주\)|유한회사|\(유\)|유한책임회사/.test(name);
+  // 순수 상호명 추출 (법인격 제거)
+  const pureName = name.replace(/(주식회사|유한회사|유한책임회사|\(주\)|\(유\)|\(|\))/g, '').trim();
+  if (!pureName) return [];
+
+  // 법인이면 "(주)상호명"으로 검색하여 정확도 향상, 아니면 순수 상호명으로 검색
+  const query = isCorp ? `(주)${pureName}` : pureName;
+  const res = await fetch(`/api/naver/search?q=${encodeURIComponent(query)}`);
   if (!res.ok) return [];
   const json = await res.json();
   const items: NaverResult[] = json.items || [];
   if (items.length === 0) return [];
 
-  // 1순위: 첫 번째 결과는 네이버 랭킹 신뢰 (항상 포함)
-  const result: NaverResult[] = [items[0]];
-  // 2~5번째: 상호명 일치하는 것만 추가
-  for (let i = 1; i < items.length; i++) {
-    if (isNameMatch(items[i].title, cleaned)) {
-      result.push(items[i]);
+  // 상호명 일치하는 결과를 우선 수집
+  const matched: NaverResult[] = [];
+  const unmatched: NaverResult[] = [];
+  for (const item of items) {
+    if (isNameMatch(item.title, pureName)) {
+      matched.push(item);
+    } else {
+      unmatched.push(item);
     }
   }
-  return result.slice(0, 2);
+
+  // 일치 결과가 있으면 일치 결과만, 없으면 첫 번째 결과 반환
+  if (matched.length > 0) return matched.slice(0, 2);
+  return [items[0]];
 }
 
 async function uploadToServerDb(businesses: BusinessData[]) {
@@ -382,30 +396,33 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
         }
         return;
       }
-      // 2순위: 공공데이터 API (금융위원회 + 국민연금)
-      const publicData = await fetchPublicDataInfo(input);
-      if (publicData) {
-        // 국세청 상태도 병렬로 조회
-        const nts = await fetchBusinessStatus(input);
-        const merged = {
-          ...publicData,
-          b_stt_cd: nts?.b_stt_cd,
-          tax_type_cd: nts?.tax_type_cd,
+      // 2순위: 공공데이터 + 국세청 병렬 조회
+      const [publicData, nts] = await Promise.all([
+        fetchPublicDataInfo(input),
+        fetchBusinessStatus(input),
+      ]);
+
+      if (publicData || nts) {
+        // 공공데이터(업태/업종/주소 등) + 국세청(상태/과세유형) 병합
+        const merged: BusinessData = {
+          b_no: (publicData?.b_no || nts?.b_no || input.replace(/-/g, '')),
+          // 상호명: 공공데이터 우선 (금융위원회 corpNm 포함)
+          b_nm: publicData?.b_nm || nts?.b_nm || '',
+          p_nm: publicData?.p_nm || nts?.p_nm || '',
+          // 업태/업종: 공공데이터에서 가져옴
+          b_sector: publicData?.b_sector || nts?.b_sector || '',
+          b_type: publicData?.b_type || nts?.b_type || '',
+          b_adr: publicData?.b_adr || nts?.b_adr || '',
+          // 상태/과세유형: 국세청에서 가져옴
+          b_stt_cd: nts?.b_stt_cd || publicData?.b_stt_cd,
+          tax_type_cd: nts?.tax_type_cd || publicData?.tax_type_cd,
+          start_dt: nts?.start_dt || publicData?.start_dt,
         };
-        setResult(merged); setResultSource('public');
+        setResult(merged);
+        setResultSource(publicData ? 'public' : 'api');
         if (merged.b_nm) {
           setNaverLoading(true);
           searchNaver(merged.b_nm).then((items) => setNaverInfo(items)).catch(() => {}).finally(() => setNaverLoading(false));
-        }
-        return;
-      }
-      // 3순위: 국세청 공공데이터 API (상태만)
-      const nts = await fetchBusinessStatus(input);
-      if (nts) {
-        setResult(nts); setResultSource('api');
-        if (nts.b_nm) {
-          setNaverLoading(true);
-          searchNaver(nts.b_nm).then((items) => setNaverInfo(items)).catch(() => {}).finally(() => setNaverLoading(false));
         }
         return;
       }
