@@ -350,10 +350,10 @@ function classifyRow(
     return result;
   }
 
-  // low confidence일 때 DB/네이버 카테고리로 추가 분류 시도
+  // low confidence일 때 업종 텍스트로 추가 분류 시도 (industry 모드: 표준 행정 용어이므로 단순 포함 검사)
   const categoryText = bizInfo.sector || businessType;
   if (categoryText) {
-    const category = classifyBusiness(categoryText);
+    const category = classifyBusiness(categoryText, 'industry');
     if (category.label !== "일반사업체") {
       const catAccount = CATEGORY_ACCOUNT_MAP[category.label];
       if (catAccount) {

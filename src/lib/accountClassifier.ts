@@ -356,10 +356,45 @@ export const NAME_TO_CODE: Record<string, string> = {
 };
 
 // ── 공통 함수 ──
-export function classifyBusiness(text: string): CategoryInfo {
+
+/**
+ * 키워드가 텍스트 내에서 독립 단어로 존재하는지 확인
+ * 한글 2자 이하 단어는 앞 글자가 한글이면 합성어로 판단 → 매칭 제외
+ * 예) "버스" → "이노버스"에서는 불매칭, "버스회사"에서는 매칭
+ */
+function matchesKeyword(text: string, kw: string): boolean {
+  const kwLower = kw.toLowerCase();
+  let idx = 0;
+  while (true) {
+    const pos = text.indexOf(kwLower, idx);
+    if (pos === -1) return false;
+
+    // 한글 2자 이하 키워드: 앞 글자가 한글이면 합성어 → 매칭 안 함
+    const isKoreanShort = [...kw].length <= 2 && /[가-힣]/.test(kw);
+    if (isKoreanShort) {
+      const before = pos > 0 ? text[pos - 1] : '';
+      if (/[가-힣]/.test(before)) {
+        idx = pos + 1;
+        continue; // 앞이 한글이면 합성어 → 다음 위치에서 재탐색
+      }
+    }
+    return true;
+  }
+}
+
+/**
+ * mode 'industry': 업종명/업태 텍스트용 — 단순 포함 검사 (표준 행정 용어이므로 합성어 판별 불필요)
+ *   예) "기계장치제조업" → "제조" 매칭 ✓
+ * mode 'name': 상호명 텍스트용 — matchesKeyword 사용 (합성어 오매칭 방지)
+ *   예) "이노버스" → "버스" 불매칭 ✓
+ */
+export function classifyBusiness(text: string, mode: 'industry' | 'name' = 'name'): CategoryInfo {
   const lower = text.toLowerCase();
+  const matches = mode === 'industry'
+    ? (kw: string) => lower.includes(kw.toLowerCase())
+    : (kw: string) => matchesKeyword(lower, kw);
   for (const rule of CATEGORY_RULES) {
-    if (rule.keywords.some((kw) => lower.includes(kw.toLowerCase()))) {
+    if (rule.keywords.some(matches)) {
       return rule;
     }
   }
@@ -370,7 +405,7 @@ export function getAccountSuggestion(text: string, categoryLabel: string, rules:
   const lower = text.toLowerCase();
   // 1순위: 노션 규칙 (키워드 매칭)
   for (const rule of rules) {
-    if (rule.keywords.some((kw) => lower.includes(kw.toLowerCase()))) {
+    if (rule.keywords.some((kw) => matchesKeyword(lower, kw))) {
       return { code: rule.code, name: rule.name, tag: rule.tag, note: rule.note, fromRule: true };
     }
   }

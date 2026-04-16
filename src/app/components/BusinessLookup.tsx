@@ -39,13 +39,33 @@ interface NaverResult {
 // Utilities — classify (delegated to @/lib/accountClassifier)
 // ============================================================
 function classifyBusinessLocal(data: BusinessData, naverCategory?: string): CategoryInfo {
-  const text = [data.b_nm, data.b_type, data.b_sector, naverCategory].filter(Boolean).join(' ');
-  return classifyBusinessText(text);
+  // 1순위: 업종/업태 → industry 모드 (단순 포함 검사, 표준 행정 용어)
+  // 예) "기계장치제조업" → "제조" 매칭 ✓
+  const industryText = [data.b_type, data.b_sector].filter(Boolean).join(' ');
+  if (industryText) {
+    const industryCategory = classifyBusinessText(industryText, 'industry');
+    if (industryCategory.label !== '일반사업체') return industryCategory;
+  }
+  // 2순위: 상호명 → name 모드 (합성어 오매칭 방지)
+  // 예) "이노버스" → "버스" 불매칭 ✓
+  if (data.b_nm) {
+    const nameCategory = classifyBusinessText(data.b_nm, 'name');
+    if (nameCategory.label !== '일반사업체') return nameCategory;
+  }
+  // 3순위: 네이버 카테고리 — 업종 데이터가 없을 때만 보조 활용
+  // 업종 데이터가 있는데도 네이버 카테고리를 쓰면 동명이사(同名異社) 오매칭 위험
+  if (naverCategory && !industryText) {
+    return classifyBusinessText(naverCategory, 'industry');
+  }
+  return classifyBusinessText('', 'name');
 }
 
 function getAccountSuggestionLocal(data: BusinessData, categoryLabel: string, rules: MatchingRule[]): AccountSuggestion | null {
-  const text = [data.b_nm, data.b_type, data.b_sector].filter(Boolean).join(' ');
-  return getAccountSuggestionText(text, categoryLabel, rules);
+  // 계정과목 매칭도 업종/업태 우선, 상호명은 보조
+  const industryText = [data.b_type, data.b_sector].filter(Boolean).join(' ');
+  const fullText = [data.b_nm, data.b_type, data.b_sector].filter(Boolean).join(' ');
+  // 업종/업태로 먼저 시도, 없으면 전체 텍스트
+  return getAccountSuggestionText(industryText || fullText, categoryLabel, rules);
 }
 
 function getStatusInfo(code?: string) {
@@ -476,17 +496,14 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
     } catch { /* ignore */ } finally { setNaverLoading(false); }
   };
 
-  // 분류 우선순위: 1) DB 데이터(b_nm, b_sector, b_type) → 2) 네이버 이름 일치 결과 카테고리
-  const dbCategory = result ? classifyBusinessLocal(result) : null;
   // 네이버 카테고리는 상호명 일치하는 결과만 분류에 활용
+  // classifyBusinessLocal 내부에서 업종 데이터가 있으면 naverCategory를 무시하므로 안전
   const matchedNaverCategory = (() => {
     if (!result?.b_nm || naverInfo.length === 0) return undefined;
     const matched = naverInfo.find((n) => isNameMatch(n.title, result.b_nm || ''));
     return matched?.category;
   })();
-  const category = result
-    ? (dbCategory && dbCategory.label !== '일반사업체' ? dbCategory : classifyBusinessLocal(result, matchedNaverCategory))
-    : null;
+  const category = result ? classifyBusinessLocal(result, matchedNaverCategory) : null;
   const statusInfo = result ? getStatusInfo(result.b_stt_cd) : null;
 
   return (
