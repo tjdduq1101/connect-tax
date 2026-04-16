@@ -160,6 +160,13 @@ function hasLegalEntityPrefix(name: string): boolean {
   return /주식회사|\(주\)|유한회사|\(유\)|유한책임회사|합명회사|합자회사|사단법인|재단법인|사회적협동조합|협동조합/.test(name);
 }
 
+// 법인(isCorpFromBno)인데 공공 API에서도 법인격을 확인하지 못한 경우 "(주)" 보완
+// 사업자번호 80~99 = 법인이므로 최소한 주식회사임을 표시
+function applyCorpPrefix(bno: string, b_nm: string): string {
+  if (!b_nm || !isCorpFromBno(bno) || hasLegalEntityPrefix(b_nm)) return b_nm;
+  return `(주) ${b_nm}`;
+}
+
 async function searchNaver(name: string, isCorpHint?: boolean): Promise<NaverResult[]> {
   // 법인 여부 판별: 이름에 법인격 포함 또는 사업자번호 기반 힌트
   const isCorp = isCorpHint || /주식회사|\(주\)|유한회사|\(유\)|유한책임회사/.test(name);
@@ -434,6 +441,8 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
           if (!dbResult.b_type && publicData?.b_type) dbResult.b_type = publicData.b_type;
           if (!dbResult.b_adr && publicData?.b_adr) dbResult.b_adr = publicData.b_adr;
           if (!dbResult.p_nm && publicData?.p_nm) dbResult.p_nm = publicData.p_nm;
+          // 공공API에서도 법인격을 확인 못한 경우 → "(주)" 보완
+          if (dbResult.b_nm) dbResult.b_nm = applyCorpPrefix(input, dbResult.b_nm);
         }
         setResult(dbResult); setResultSource('db');
         if (dbResult.b_nm) {
@@ -452,8 +461,8 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
         // 공공데이터(업태/업종/주소 등) + 국세청(상태/과세유형) 병합
         const merged: BusinessData = {
           b_no: (publicData?.b_no || nts?.b_no || input.replace(/-/g, '')),
-          // 상호명: 공공데이터 우선 (금융위원회 corpNm 포함)
-          b_nm: publicData?.b_nm || nts?.b_nm || '',
+          // 상호명: 공공데이터 우선 (금융위원회 corpNm 포함), 법인격 미표기 시 "(주)" 보완
+          b_nm: applyCorpPrefix(input, publicData?.b_nm || nts?.b_nm || ''),
           p_nm: publicData?.p_nm || nts?.p_nm || '',
           // 업태/업종: 공공데이터에서 가져옴
           b_sector: publicData?.b_sector || nts?.b_sector || '',
