@@ -45,7 +45,7 @@ interface NaverResult {
 interface BusinessInfo {
   sector: string;   // 업태
   type: string;     // 종목
-  source: "db" | "naver" | "";
+  source: "db" | "public" | "naver" | "";
 }
 
 interface ManualOverride {
@@ -219,6 +219,28 @@ async function searchDbByName(tradeName: string): Promise<BusinessInfo | null> {
 }
 
 // ============================================================
+// 공공데이터 조회 — 금융위원회 + 국민연금
+// ============================================================
+async function searchPublicDataBizInfo(bno: string): Promise<BusinessInfo | null> {
+  const cleaned = bno.replace(/[^0-9]/g, "");
+  if (cleaned.length !== 10) return null;
+  try {
+    const res = await fetch(`/api/data-go-kr/business-info?bno=${encodeURIComponent(cleaned)}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const d = json.data;
+    if (!d || !d.b_nm) return null;
+    return {
+      sector: d.b_sector || d.b_type || "",
+      type: d.b_type || "",
+      source: "public",
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================
 // 네이버 검색 — 법인접미사 제거 후 검색, 상위 3개 매칭 검증
 // ============================================================
 async function searchNaverBizInfo(tradeName: string): Promise<BusinessInfo | null> {
@@ -242,7 +264,7 @@ async function searchNaverBizInfo(tradeName: string): Promise<BusinessInfo | nul
 }
 
 // ============================================================
-// 거래처 업종 조회: DB 우선 → 네이버 폴백
+// 거래처 업종 조회: DB → 공공데이터 → 네이버 폴백
 // ============================================================
 async function lookupBusinessInfo(tradeName: string, code: string): Promise<BusinessInfo> {
   // 1. Code가 사업자번호(10자리)이면 DB 조회
@@ -253,7 +275,11 @@ async function lookupBusinessInfo(tradeName: string, code: string): Promise<Busi
   const dbByName = await searchDbByName(tradeName);
   if (dbByName) return dbByName;
 
-  // 3. 네이버 검색 폴백
+  // 3. 공공데이터 (금융위원회 + 국민연금)
+  const publicData = await searchPublicDataBizInfo(code);
+  if (publicData) return publicData;
+
+  // 4. 네이버 검색 폴백
   const naver = await searchNaverBizInfo(tradeName);
   if (naver) return naver;
 
@@ -296,7 +322,7 @@ function classifyCashReceipt(
           name: catAccount.name,
           tag: catAccount.tag,
           confidence: "medium",
-          note: `${bizInfo.source === "db" ? "DB" : "네이버"}: ${bizInfo.sector}`,
+          note: `${bizInfo.source === "db" ? "DB" : bizInfo.source === "public" ? "공공데이터" : "네이버"}: ${bizInfo.sector}`,
         };
       }
     }
@@ -897,7 +923,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
               <div className="space-y-2">
                 <div className="flex items-center justify-center gap-2 text-slate-500 font-bold text-sm">
                   <span className="inline-block w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
-                  네이버 검색 중... ({progress.current}/{progress.total})
+                  거래처 조회 중... ({progress.current}/{progress.total})
                 </div>
                 <div className="w-full bg-slate-200 rounded-full h-1.5">
                   <div
@@ -913,7 +939,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                   현금영수증(매입) 엑셀을 업로드하세요
                 </p>
                 <p className="text-[10px] text-slate-300 mt-1">
-                  .xlsx 파일 지원 · 네이버 검색으로 업종 자동 조회
+                  .xlsx 파일 지원 · 공공데이터/네이버 검색으로 업종 자동 조회
                 </p>
                 {fileName && (
                   <p className="text-[10px] text-blue-500 font-bold mt-2">현재 파일: {fileName}</p>
@@ -1106,7 +1132,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                               )}
                             </td>
                             <td className="px-3 py-1.5 text-[10px] text-slate-400 truncate" style={{ maxWidth: colWidths.biz }}>
-                              {c.bizInfo.sector ? `${c.bizInfo.source === "db" ? "[DB]" : ""} ${c.bizInfo.sector}` : "-"}
+                              {c.bizInfo.sector ? `${c.bizInfo.source === "db" ? "[DB]" : c.bizInfo.source === "public" ? "[공공]" : c.bizInfo.source === "naver" ? "[N]" : ""} ${c.bizInfo.sector}` : "-"}
                             </td>
                           </tr>
                         );

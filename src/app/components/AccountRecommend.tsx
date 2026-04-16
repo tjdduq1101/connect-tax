@@ -89,7 +89,7 @@ interface HistoryEntry {
 interface BusinessInfo {
   sector: string;
   type: string;
-  source: "" | "db" | "naver";
+  source: "" | "db" | "public" | "naver";
 }
 
 // ============================================================
@@ -176,6 +176,28 @@ async function searchDbByName(tradeName: string): Promise<BusinessInfo | null> {
 }
 
 // ============================================================
+// 공공데이터 조회 — 금융위원회 + 국민연금
+// ============================================================
+async function searchPublicDataBizInfo(bno: string): Promise<BusinessInfo | null> {
+  const cleaned = bno.replace(/[^0-9]/g, "");
+  if (cleaned.length !== 10) return null;
+  try {
+    const res = await fetch(`/api/data-go-kr/business-info?bno=${encodeURIComponent(cleaned)}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const d = json.data;
+    if (!d || !d.b_nm) return null;
+    return {
+      sector: d.b_sector || d.b_type || "",
+      type: d.b_type || "",
+      source: "public",
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================
 // 네이버 검색 — 법인접미사 제거 후 검색, 상위 3개 매칭 검증
 // ============================================================
 async function searchNaverBizInfo(tradeName: string): Promise<BusinessInfo | null> {
@@ -199,7 +221,7 @@ async function searchNaverBizInfo(tradeName: string): Promise<BusinessInfo | nul
 }
 
 // ============================================================
-// 거래처 업종 조회: DB 우선 → 네이버 폴백
+// 거래처 업종 조회: DB → 공공데이터 → 네이버 폴백
 // ============================================================
 async function lookupBusinessInfo(tradeName: string, bno: string): Promise<BusinessInfo> {
   const dbByBno = await searchDbByBno(bno);
@@ -207,6 +229,10 @@ async function lookupBusinessInfo(tradeName: string, bno: string): Promise<Busin
 
   const dbByName = await searchDbByName(tradeName);
   if (dbByName) return dbByName;
+
+  // 공공데이터 (금융위원회 + 국민연금)
+  const publicData = await searchPublicDataBizInfo(bno);
+  if (publicData) return publicData;
 
   const naver = await searchNaverBizInfo(tradeName);
   if (naver) return naver;
@@ -336,7 +362,7 @@ function classifyRow(
           name: catAccount.name,
           tag: catAccount.tag,
           confidence: "medium",
-          note: `${bizInfo.source === "db" ? "DB" : bizInfo.source === "naver" ? "네이버" : "카테고리"}: ${categoryText}`,
+          note: `${bizInfo.source === "db" ? "DB" : bizInfo.source === "public" ? "공공데이터" : bizInfo.source === "naver" ? "네이버" : "카테고리"}: ${categoryText}`,
         };
       }
     }
@@ -1231,7 +1257,7 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
                           : c.result.confidence === "high" ? "text-green-500"
                           : c.result.confidence === "medium" ? "text-amber-500" : "text-red-500";
                         const excelBiz = [c.input.업태, c.input.종목].filter(Boolean).join(" / ");
-                        const fetchedBiz = c.bizInfo.sector ? `[${c.bizInfo.source === "db" ? "DB" : "N"}] ${c.bizInfo.sector}${c.bizInfo.type ? " / " + c.bizInfo.type : ""}` : "";
+                        const fetchedBiz = c.bizInfo.sector ? `[${c.bizInfo.source === "db" ? "DB" : c.bizInfo.source === "public" ? "공공" : "N"}] ${c.bizInfo.sector}${c.bizInfo.type ? " / " + c.bizInfo.type : ""}` : "";
                         const bizDisplay = excelBiz || fetchedBiz || "-";
                         const isEditingAccount = editingCell?.origIdx === origIdx && editingCell?.field === "account";
                         const isEditingTag = editingCell?.origIdx === origIdx && editingCell?.field === "tag";
