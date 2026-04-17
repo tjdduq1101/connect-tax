@@ -259,22 +259,30 @@ async function searchNaverBizInfo(tradeName: string): Promise<BusinessInfo | nul
 }
 
 // ============================================================
-// 거래처 업종 조회: DB → 공공데이터 → 네이버 폴백
+// 거래처 업종 조회: DB+공공API 병렬 비교 → 불일치 시 API 우선
 // ============================================================
 async function lookupBusinessInfo(tradeName: string, code: string): Promise<BusinessInfo> {
-  // 1. Code가 사업자번호(10자리)이면 DB 조회
-  const dbByBno = await searchDbByBno(code);
-  if (dbByBno) return dbByBno;
+  // DB와 공공API 항상 병렬 조회하여 비교
+  const [dbByBno, publicData] = await Promise.all([
+    searchDbByBno(code),
+    searchPublicDataBizInfo(code),
+  ]);
 
-  // 2. 거래처명으로 DB 검색
+  if (dbByBno && publicData) {
+    // sector/type 중 하나라도 다르면 API 기준
+    const sectorDiffers = !!(dbByBno.sector && publicData.sector &&
+      dbByBno.sector.trim() !== publicData.sector.trim());
+    const typeDiffers = !!(dbByBno.type && publicData.type &&
+      dbByBno.type.trim() !== publicData.type.trim());
+    return (sectorDiffers || typeDiffers) ? publicData : dbByBno;
+  }
+  if (dbByBno) return dbByBno;
+  if (publicData) return publicData;
+
+  // bno 조회 모두 실패 시 이름 기반 폴백
   const dbByName = await searchDbByName(tradeName);
   if (dbByName) return dbByName;
 
-  // 3. 공공데이터 (금융위원회 + 국민연금)
-  const publicData = await searchPublicDataBizInfo(code);
-  if (publicData) return publicData;
-
-  // 4. 네이버 검색 폴백
   const naver = await searchNaverBizInfo(tradeName);
   if (naver) return naver;
 

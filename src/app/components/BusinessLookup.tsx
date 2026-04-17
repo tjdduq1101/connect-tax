@@ -300,28 +300,47 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
     setLoading(true); setError(''); setResult(null); setResultSource(''); setNaverInfo([]); setManualName('');
     const isCorp = isCorpFromBno(input);
     try {
-      // 1순위: 공유 DB
-      const dbResult = await searchServerDb(input);
+      // 1순위: 공유 DB — 공공API와 항상 병렬 조회하여 내역 비교
+      const [dbResult, publicData] = await Promise.all([
+        searchServerDb(input),
+        fetchPublicDataInfo(input),
+      ]);
+
       if (dbResult) {
-        if (needsPublicApiSync(dbResult.public_api_synced_at)) {
-          // 6개월 초과 또는 미보강 → 공공API로 최신 데이터 덮어쓰기
-          const publicData = await fetchPublicDataInfo(input);
-          const updatePayload: Record<string, string> = {};
-          if (publicData?.b_nm) { dbResult.b_nm = applyCorpPrefix(input, publicData.b_nm); updatePayload.b_nm = dbResult.b_nm; }
-          if (publicData?.p_nm) { dbResult.p_nm = publicData.p_nm; updatePayload.p_nm = publicData.p_nm; }
-          if (publicData?.b_sector) { dbResult.b_sector = publicData.b_sector; updatePayload.b_sector = publicData.b_sector; }
-          if (publicData?.b_type) { dbResult.b_type = publicData.b_type; updatePayload.b_type = publicData.b_type; }
-          if (publicData?.b_adr) { dbResult.b_adr = publicData.b_adr; updatePayload.b_adr = publicData.b_adr; }
-          if (!publicData && isCorp && !hasLegalEntityPrefix(dbResult.b_nm || '') && dbResult.b_nm) {
+        const updatePayload: Record<string, string> = {};
+
+        if (publicData) {
+          // 상호명·업태·업종 중 하나라도 다르면 API 기준으로 덮어쓰기
+          const nameDiffers = !!(publicData.b_nm && dbResult.b_nm &&
+            normalizeName(publicData.b_nm) !== normalizeName(dbResult.b_nm));
+          const sectorDiffers = !!(publicData.b_sector && dbResult.b_sector &&
+            publicData.b_sector.trim() !== dbResult.b_sector.trim());
+          const typeDiffers = !!(publicData.b_type && dbResult.b_type &&
+            publicData.b_type.trim() !== dbResult.b_type.trim());
+
+          if (nameDiffers || sectorDiffers || typeDiffers || needsPublicApiSync(dbResult.public_api_synced_at)) {
+            if (publicData.b_nm) { dbResult.b_nm = applyCorpPrefix(input, publicData.b_nm); updatePayload.b_nm = dbResult.b_nm; }
+            if (publicData.p_nm) { dbResult.p_nm = publicData.p_nm; updatePayload.p_nm = publicData.p_nm; }
+            if (publicData.b_sector) { dbResult.b_sector = publicData.b_sector; updatePayload.b_sector = publicData.b_sector; }
+            if (publicData.b_type) { dbResult.b_type = publicData.b_type; updatePayload.b_type = publicData.b_type; }
+            if (publicData.b_adr) { dbResult.b_adr = publicData.b_adr; updatePayload.b_adr = publicData.b_adr; }
+            fetch('/api/db/update', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ b_no: input.replace(/-/g, ''), ...updatePayload }),
+            }).catch(() => {});
+          }
+        } else if (needsPublicApiSync(dbResult.public_api_synced_at)) {
+          if (isCorp && !hasLegalEntityPrefix(dbResult.b_nm || '') && dbResult.b_nm) {
             dbResult.b_nm = applyCorpPrefix(input, dbResult.b_nm);
           }
-          // 공공API 결과 유무와 무관하게 synced_at 기록 (백그라운드)
           fetch('/api/db/update', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ b_no: input.replace(/-/g, ''), ...updatePayload }),
+            body: JSON.stringify({ b_no: input.replace(/-/g, '') }),
           }).catch(() => {});
         }
+
         setResult(dbResult); setResultSource('db');
         if (dbResult.b_nm) {
           setNaverLoading(true);
@@ -329,11 +348,9 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
         }
         return;
       }
-      // 2순위: 공공데이터 + 국세청 병렬 조회
-      const [publicData, nts] = await Promise.all([
-        fetchPublicDataInfo(input),
-        fetchBusinessStatus(input),
-      ]);
+
+      // 2순위: DB 없을 때 — publicData 이미 조회됨, 국세청만 추가 조회
+      const nts = await fetchBusinessStatus(input);
 
       if (publicData || nts) {
         // 공공데이터(업태/업종/주소 등) + 국세청(상태/과세유형) 병합
