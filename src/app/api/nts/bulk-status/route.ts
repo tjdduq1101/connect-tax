@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
 
       const data = await res.json();
       const items = data?.data ?? [];
-allResults.push(...items);
+      allResults.push(...items);
     }
 
     return Response.json({ data: allResults });

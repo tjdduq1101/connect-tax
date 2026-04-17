@@ -138,7 +138,7 @@ export const CATEGORY_RULES: { keywords: string[]; label: string; emoji: string;
   { keywords: ['편의점', 'GS25', '지에스25', 'CU', '씨유', '세븐일레븐', '이마트24', '미니스톱'], label: '편의점', emoji: '🏪', desc: '편의점입니다', color: '#2196F3', bg: '#E3F2FD' },
   { keywords: ['마트', '이마트', '홈플러스', '롯데마트', '슈퍼', '하나로', '농협마트'], label: '마트', emoji: '🛒', desc: '마트/슈퍼입니다', color: '#4CAF50', bg: '#E8F5E9' },
   { keywords: ['주유', 'LPG', '엘피지', '가스충전', '충전소'], label: '주유소', emoji: '⛽', desc: '주유소입니다', color: '#FF9800', bg: '#FFF3E0' },
-  { keywords: ['도매', '도매업', '무역', '수출', '수입', '상사', '트레이딩', '인터내셔날', '인터내셔널', '유통'], label: '도매/무역', emoji: '📦', desc: '도매/무역업입니다', color: '#0277BD', bg: '#E1F5FE' },
+  { keywords: ['도매', '도매업', '소매', '도소매', '무역', '수출', '수입', '상사', '트레이딩', '인터내셔날', '인터내셔널', '유통'], label: '도매/무역', emoji: '📦', desc: '도매/무역업입니다', color: '#0277BD', bg: '#E1F5FE' },
   { keywords: ['의류', '옷', '패션', '의복', '잡화', '백화점', '아울렛', '한섬'], label: '의류/패션', emoji: '👗', desc: '의류/패션업입니다', color: '#AD1457', bg: '#FCE4EC' },
   { keywords: ['꽃', '화훼', '플라워', '꽃집', '화원'], label: '화훼', emoji: '💐', desc: '꽃집/화훼업입니다', color: '#C62828', bg: '#FFEBEE' },
   { keywords: ['약', '의약품', '의료기기', '제약', '후디스'], label: '의약품', emoji: '💊', desc: '의약품판매업입니다', color: '#1B5E20', bg: '#E8F5E9' },

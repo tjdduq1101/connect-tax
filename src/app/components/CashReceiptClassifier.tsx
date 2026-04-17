@@ -36,11 +36,6 @@ interface CashReceiptRow {
   전표상태: string;
 }
 
-interface NaverResult {
-  category: string;
-  title: string;
-}
-
 // 업종 조회 결과 (DB or 네이버)
 interface BusinessInfo {
   sector: string;   // 업태
@@ -601,7 +596,6 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
 
   // 통계
   const total = classified.length;
-  const highCount = classified.filter((c) => c.result.confidence === "high").length;
   const changedCount = classified.filter((c) => c.changed).length;
   const lowCount = classified.filter((c) => c.result.confidence === "low").length;
   const excludeCount = classified.filter((c) => c.result.tag === "전송제외").length;

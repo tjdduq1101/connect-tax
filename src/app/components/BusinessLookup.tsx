@@ -1,6 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from 'react';
-import * as XLSX from 'xlsx';
+import { useState, useEffect } from 'react';
 import {
   classifyBusiness as classifyBusinessText,
   getAccountSuggestion as getAccountSuggestionText,
@@ -40,8 +39,8 @@ interface NaverResult {
 // ============================================================
 function classifyBusinessLocal(data: BusinessData, naverCategory?: string): CategoryInfo {
   // 1순위: 업종/업태 → industry 모드 (단순 포함 검사, 표준 행정 용어)
-  // 예) "기계장치제조업" → "제조" 매칭 ✓
-  const industryText = [data.b_type, data.b_sector].filter(Boolean).join(' ');
+  // 예) "기계장치제조업" → "제조" 매칭 ✓, "도.소매" → 점 제거 후 "도소매" 정규화
+  const industryText = [data.b_type, data.b_sector].filter(Boolean).join(' ').replace(/\./g, '');
   if (industryText) {
     const industryCategory = classifyBusinessText(industryText, 'industry');
     if (industryCategory.label !== '일반사업체') return industryCategory;
@@ -156,14 +155,18 @@ function isCorpFromBno(bno: string): boolean {
 }
 
 // 상호명에 법인격 표시가 있는지 확인
+// ㈜(U+3338), 전각괄호（주）등 인코딩 변형 포함
 function hasLegalEntityPrefix(name: string): boolean {
-  return /주식회사|\(주\)|유한회사|\(유\)|유한책임회사|합명회사|합자회사|사단법인|재단법인|사회적협동조합|협동조합/.test(name);
+  const normalized = name.replace(/（/g, '(').replace(/）/g, ')').replace(/㈜/g, '(주)');
+  return /주식회사|\(주\)|유한회사|\(유\)|유한책임회사|합명회사|합자회사|사단법인|재단법인|사회적협동조합|협동조합/.test(normalized);
 }
 
 // 법인(isCorpFromBno)인데 공공 API에서도 법인격을 확인하지 못한 경우 "(주)" 보완
 // 사업자번호 80~99 = 법인이므로 최소한 주식회사임을 표시
 function applyCorpPrefix(bno: string, b_nm: string): string {
   if (!b_nm || !isCorpFromBno(bno) || hasLegalEntityPrefix(b_nm)) return b_nm;
+  // 정규식 미탐지 변형 대응 — 직접 문자열 포함 여부 재확인
+  if (b_nm.includes('(주)') || b_nm.includes('주식회사') || b_nm.includes('㈜')) return b_nm;
   return `(주) ${b_nm}`;
 }
 
@@ -198,16 +201,6 @@ async function searchNaver(name: string, isCorpHint?: boolean): Promise<NaverRes
   return [items[0]];
 }
 
-async function uploadToServerDb(businesses: BusinessData[]) {
-  const res = await fetch('/api/db/upload', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ businesses }),
-  });
-  if (!res.ok) throw new Error('업로드 실패');
-  return res.json();
-}
-
 async function getServerDbStats(): Promise<{ count: number }> {
   const res = await fetch('/api/db/stats');
   if (!res.ok) return { count: 0 };
@@ -215,137 +208,8 @@ async function getServerDbStats(): Promise<{ count: number }> {
 }
 
 // ============================================================
-// Utilities — Excel parser
-// ============================================================
-function parseBusinessExcel(file: File): Promise<BusinessData[]> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const wb = XLSX.read(e.target?.result, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
-        if (rows.length === 0) return resolve([]);
-
-        const cols = Object.keys(rows[0] || {});
-        const map: Record<string, BusinessData> = {};
-
-        for (const r of rows) {
-          let bno = '';
-          let nm = '';
-          let sector = '';
-          let type = '';
-          let rep = '';
-
-          const bnoRaw = r['사업자등록번호'] || r['사업자번호'] || '';
-          const bnoFromRaw = String(bnoRaw).replace(/[^0-9]/g, '');
-
-          if (bnoFromRaw.length === 10) {
-            bno = bnoFromRaw;
-            nm = String(r['거래처'] || r['상호명'] || r['업체명'] || r['거래처명'] || '').trim();
-            sector = String(r['업태'] || '').trim();
-            type = String(r['종목'] || r['업종'] || '').trim();
-            rep = String(r['대표자'] || r['대표자명'] || '').trim();
-          } else {
-            for (const col of cols) {
-              const val = String(r[col] || '').replace(/[^0-9]/g, '');
-              if (val.length === 10 && col !== 'Code') {
-                bno = val;
-                break;
-              }
-            }
-            if (!bno) continue;
-            nm = String(r['거래처명'] || r['거래처'] || r['상호명'] || r['업체명'] || '').trim();
-            sector = String(r['업태'] || '').trim();
-            type = String(r['종목'] || r['업종'] || '').trim();
-            rep = String(r['대표자'] || r['대표자명'] || '').trim();
-          }
-
-          if (!bno) continue;
-          if (!map[bno]) {
-            map[bno] = { b_no: bno, b_nm: nm, b_sector: sector, b_type: type, p_nm: rep };
-          } else {
-            if (nm && !map[bno].b_nm) map[bno].b_nm = nm;
-            if (sector && !map[bno].b_sector) map[bno].b_sector = sector;
-            if (type && !map[bno].b_type) map[bno].b_type = type;
-            if (rep && !map[bno].p_nm) map[bno].p_nm = rep;
-          }
-        }
-        resolve(Object.values(map));
-      } catch {
-        reject(new Error('파일을 읽는 중 오류가 발생했습니다.'));
-      }
-    };
-    reader.onerror = () => reject(new Error('파일 읽기에 실패했습니다.'));
-    reader.readAsArrayBuffer(file);
-  });
-}
-
-// ============================================================
 // Sub-components
 // ============================================================
-function UploadPanel({ onDbUpdate }: { onDbUpdate: (count: number) => void }) {
-  const [dragging, setDragging] = useState(false);
-  const [status, setStatus] = useState<{ count: number; total: number; files: number } | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const handleFiles = async (fileList: FileList) => {
-    const files = Array.from(fileList).filter((f) => f.name.match(/\.xlsx?$/i));
-    if (files.length === 0) { setError('xlsx 파일만 업로드 가능합니다.'); return; }
-    setLoading(true); setError(''); setStatus(null);
-    try {
-      const allEntries: Record<string, BusinessData> = {};
-      for (const file of files) {
-        const entries = await parseBusinessExcel(file);
-        for (const e of entries) allEntries[e.b_no] = e;
-      }
-      const merged = Object.values(allEntries);
-      if (merged.length === 0) { setError('사업자번호 데이터를 찾을 수 없습니다.'); return; }
-      const result = await uploadToServerDb(merged);
-      const stats = await getServerDbStats();
-      setStatus({ count: result.count, total: stats.count, files: files.length });
-      onDbUpdate(stats.count);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '업로드 실패');
-    } finally { setLoading(false); }
-  };
-
-  return (
-    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <div
-        className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-colors ${dragging ? 'border-blue-400 bg-blue-50' : 'border-slate-200 hover:border-blue-300'}`}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); }}
-        onClick={() => inputRef.current?.click()}
-      >
-        <input ref={inputRef} type="file" accept=".xlsx,.xls" multiple className="hidden" onChange={(e) => e.target.files && handleFiles(e.target.files)} />
-        {loading ? (
-          <div className="flex items-center justify-center gap-2 text-slate-500 font-bold text-sm">
-            <span className="spinner" /> 파일 분석 및 업로드 중...
-          </div>
-        ) : (
-          <>
-            <div className="text-3xl mb-2">📊</div>
-            <p className="text-sm font-bold text-slate-500">클릭하거나 파일을 여기에 끌어다 놓으세요</p>
-            <p className="text-[10px] text-slate-300 mt-1">.xlsx 파일 지원 (여러 파일 동시 가능)</p>
-          </>
-        )}
-      </div>
-      {error && <p className="text-red-500 text-xs font-bold mt-2">⚠️ {error}</p>}
-      {status && (
-        <div className="flex gap-3 mt-3 flex-wrap">
-          {status.files > 1 && <span className="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1 rounded-full">📁 {status.files}개 파일</span>}
-          <span className="bg-green-50 text-green-600 text-xs font-bold px-3 py-1 rounded-full">✅ {status.count}건 업로드</span>
-          <span className="bg-slate-100 text-slate-600 text-xs font-bold px-3 py-1 rounded-full">🗂 총 {status.total}개</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function InfoRow({ icon, label, value }: { icon: string; label: string; value: string }) {
   return (
     <div className="flex items-center gap-3 py-2 border-b border-slate-50 last:border-0">

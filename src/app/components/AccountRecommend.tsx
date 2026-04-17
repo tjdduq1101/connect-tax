@@ -455,18 +455,18 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
   // DB/네이버 조회 캐시 (거래처명 → BusinessInfo)
   const bizCacheRef = useRef<Map<string, BusinessInfo>>(new Map());
 
-  // 노션 규칙 (마운트 시 fetch)
-  const [notionRules, setNotionRules] = useState<MatchingRule[]>([]);
+  // 노션 규칙 (마운트 시 fetch — ref로만 관리하여 재렌더 방지)
   const notionRulesRef = useRef<MatchingRule[]>([]);
+
+  // AI 분류 함수 참조 (handleFile → runAiClassify 순환 참조 방지)
+  const runAiClassifyRef = useRef<((rows: ClassifiedRow[]) => Promise<ClassifiedRow[]>) | null>(null);
 
   useEffect(() => {
     fetch("/api/notion/rules")
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.rules) {
-          const converted = convertNotionRules(data.rules);
-          setNotionRules(converted);
-          notionRulesRef.current = converted;
+          notionRulesRef.current = convertNotionRules(data.rules);
         }
       })
       .catch(() => {});
@@ -623,7 +623,7 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
       // AI 분류 자동 실행 (low confidence 항목 대상)
       const hasLow = classifiedRows.some((c) => c.result.confidence === "low");
       if (hasLow) {
-        runAiClassify(classifiedRows).then((updated) => {
+        runAiClassifyRef.current?.(classifiedRows).then((updated) => {
           setClassified(updated);
         });
       }
@@ -736,6 +736,9 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
       return rows;
     }
   }, [conditions]);
+
+  // handleFile이 최신 runAiClassify를 참조할 수 있도록 ref 동기화
+  runAiClassifyRef.current = runAiClassify;
 
   // 신규 규칙 노션에 저장
   const saveNewRule = async (candidate: NewRuleCandidate) => {
