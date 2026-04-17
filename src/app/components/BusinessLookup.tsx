@@ -22,6 +22,7 @@ interface BusinessData {
   tax_type_cd?: string;
   b_adr?: string;
   start_dt?: string;
+  public_api_synced_at?: string;
 }
 
 interface NaverResult {
@@ -95,6 +96,13 @@ function formatBizNo(raw: string) {
 function formatDate(dt?: string) {
   if (!dt || dt.length !== 8) return dt || '';
   return `${dt.slice(0, 4)}년 ${dt.slice(4, 6)}월 ${dt.slice(6)}일`;
+}
+
+function needsPublicApiSync(syncedAt?: string): boolean {
+  if (!syncedAt) return true;
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+  return new Date(syncedAt) < sixMonthsAgo;
 }
 
 // ============================================================
@@ -295,18 +303,24 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
       // 1순위: 공유 DB
       const dbResult = await searchServerDb(input);
       if (dbResult) {
-        // 법인인데 DB에 법인격 없이 저장된 경우 → 공공API로 이름 보강 시도
-        if (isCorp && !hasLegalEntityPrefix(dbResult.b_nm || '')) {
+        if (needsPublicApiSync(dbResult.public_api_synced_at)) {
+          // 6개월 초과 또는 미보강 → 공공API로 최신 데이터 덮어쓰기
           const publicData = await fetchPublicDataInfo(input);
-          if (publicData?.b_nm && hasLegalEntityPrefix(publicData.b_nm)) {
-            dbResult.b_nm = publicData.b_nm;
+          const updatePayload: Record<string, string> = {};
+          if (publicData?.b_nm) { dbResult.b_nm = applyCorpPrefix(input, publicData.b_nm); updatePayload.b_nm = dbResult.b_nm; }
+          if (publicData?.p_nm) { dbResult.p_nm = publicData.p_nm; updatePayload.p_nm = publicData.p_nm; }
+          if (publicData?.b_sector) { dbResult.b_sector = publicData.b_sector; updatePayload.b_sector = publicData.b_sector; }
+          if (publicData?.b_type) { dbResult.b_type = publicData.b_type; updatePayload.b_type = publicData.b_type; }
+          if (publicData?.b_adr) { dbResult.b_adr = publicData.b_adr; updatePayload.b_adr = publicData.b_adr; }
+          if (!publicData && isCorp && !hasLegalEntityPrefix(dbResult.b_nm || '') && dbResult.b_nm) {
+            dbResult.b_nm = applyCorpPrefix(input, dbResult.b_nm);
           }
-          if (!dbResult.b_sector && publicData?.b_sector) dbResult.b_sector = publicData.b_sector;
-          if (!dbResult.b_type && publicData?.b_type) dbResult.b_type = publicData.b_type;
-          if (!dbResult.b_adr && publicData?.b_adr) dbResult.b_adr = publicData.b_adr;
-          if (!dbResult.p_nm && publicData?.p_nm) dbResult.p_nm = publicData.p_nm;
-          // 공공API에서도 법인격을 확인 못한 경우 → "(주)" 보완
-          if (dbResult.b_nm) dbResult.b_nm = applyCorpPrefix(input, dbResult.b_nm);
+          // 공공API 결과 유무와 무관하게 synced_at 기록 (백그라운드)
+          fetch('/api/db/update', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ b_no: input.replace(/-/g, ''), ...updatePayload }),
+          }).catch(() => {});
         }
         setResult(dbResult); setResultSource('db');
         if (dbResult.b_nm) {
