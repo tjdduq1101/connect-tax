@@ -100,9 +100,9 @@ function formatDate(dt?: string) {
 
 function needsPublicApiSync(syncedAt?: string): boolean {
   if (!syncedAt) return true;
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-  return new Date(syncedAt) < sixMonthsAgo;
+  const threeMonthsAgo = new Date();
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+  return new Date(syncedAt) < threeMonthsAgo;
 }
 
 // ============================================================

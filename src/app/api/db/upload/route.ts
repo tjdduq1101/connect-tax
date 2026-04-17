@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
 
     // 배치 처리: 5개씩 순차 실행하여 네이버 API rate limit 방지
     const BATCH_SIZE = 5;
-    const rows: { b_no: string; b_nm: string | null; p_nm: string | null; b_sector: string | null; b_type: string | null; updated_at: string }[] = [];
+    const rows: { b_no: string; b_nm: string | null; p_nm: string | null; b_sector: string | null; b_type: string | null; updated_at: string; public_api_synced_at: null }[] = [];
 
     for (let i = 0; i < businesses.length; i += BATCH_SIZE) {
       const batch = businesses.slice(i, i + BATCH_SIZE);
@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
             b_sector: b.b_sector || null,
             b_type: b.b_type || null,
             updated_at: new Date().toISOString(),
+            public_api_synced_at: null,
           };
 
           // 합성키(상호명 기반)는 네이버 충돌 검사 불필요
