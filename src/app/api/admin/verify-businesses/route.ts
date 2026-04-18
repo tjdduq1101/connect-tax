@@ -4,6 +4,12 @@ import { fetchPublicBusinessInfo } from '@/lib/publicBusinessApi';
 
 export const maxDuration = 60;
 
+function checkPassword(body: Record<string, unknown>): boolean {
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminPassword) return true; // 환경변수 미설정 시 비활성화
+  return body.password === adminPassword;
+}
+
 interface DbRecord {
   b_no: string;
   b_nm: string | null;
@@ -31,6 +37,11 @@ function normalizeName(name: string): string {
 // - dryRun=true 이면 DB 수정 없이 오염 의심 레코드 목록만 반환
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
+
+  if (!checkPassword(body)) {
+    return Response.json({ error: '비밀번호가 올바르지 않습니다.' }, { status: 401 });
+  }
+
   const offset: number = typeof body.offset === 'number' ? body.offset : 0;
   const limit: number = typeof body.limit === 'number' ? Math.min(body.limit, 100) : 50;
   const dryRun: boolean = body.dryRun === true;
