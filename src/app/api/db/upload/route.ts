@@ -1,5 +1,6 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, after } from 'next/server';
 import { getSupabase } from '@/lib/supabase';
+import { verifyAndSaveReviews } from '@/lib/verifyBusinesses';
 
 interface BusinessEntry {
   b_no: string;
@@ -99,6 +100,10 @@ export async function POST(request: NextRequest) {
       .upsert(rows, { onConflict: 'b_no' });
 
     if (error) throw error;
+
+    // 응답 후 백그라운드에서 공공API 대조 검증
+    after(() => verifyAndSaveReviews(rows.map(r => ({ b_no: r.b_no, b_nm: r.b_nm }))));
+
     return Response.json({ success: true, count: rows.length });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
