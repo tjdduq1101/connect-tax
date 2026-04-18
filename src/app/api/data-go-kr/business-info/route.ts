@@ -151,12 +151,11 @@ async function searchFtc(bno: string, apiKey: string): Promise<BusinessResult | 
   return results.find(r => r !== null) ?? null;
 }
 
-// ── 4. 국민연금 가입사업장 (6자리 prefix, 1건만 신뢰) ────────
+// ── 4. 국민연금 가입사업장 (10자리 정확 매칭, 1건만 신뢰) ────────
 async function searchNps(bno: string, apiKey: string): Promise<BusinessResult | null> {
   try {
-    const prefix = bno.substring(0, 6).replace(/^0+/, '') || '0';
     const condKey = encodeURIComponent('cond[사업자등록번호::EQ]');
-    const url = `https://api.odcloud.kr/api/15083277/v1/uddi:7e1553a3-6b4a-4de0-81bf-86b37ee4d61a?page=1&perPage=10&serviceKey=${encodeURIComponent(apiKey)}&${condKey}=${prefix}`;
+    const url = `https://api.odcloud.kr/api/15083277/v1/uddi:7e1553a3-6b4a-4de0-81bf-86b37ee4d61a?page=1&perPage=1&serviceKey=${encodeURIComponent(apiKey)}&${condKey}=${bno}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return null;
 
