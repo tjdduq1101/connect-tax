@@ -16,6 +16,7 @@ interface Review {
 
 type Tab = 'reviews' | 'verify';
 type RunState = 'idle' | 'running' | 'done' | 'error';
+type SubmitState = 'idle' | 'loading' | 'done' | 'error';
 
 interface BatchResult {
   processed: number;
@@ -24,6 +25,12 @@ interface BatchResult {
   unchanged: number;
   hasMore: boolean;
   nextOffset: number;
+}
+
+interface FixedItem {
+  b_no: string;
+  old_nm: string | null;
+  new_nm: string;
 }
 
 // ── 유틸 ───────────────────────────────────────────────────────
@@ -143,6 +150,9 @@ export default function AdminPage() {
   const [progress, setProgress] = useState({ processed: 0, batches: 0 });
   const [summary, setSummary] = useState({ fixed: 0, noApiData: 0, unchanged: 0 });
   const [errorMsg, setErrorMsg] = useState('');
+  const [fixedItems, setFixedItems] = useState<FixedItem[]>([]);
+  const [submitState, setSubmitState] = useState<SubmitState>('idle');
+  const [submitMsg, setSubmitMsg] = useState('');
 
   async function handleAuth(e: React.FormEvent) {
     e.preventDefault();
@@ -176,6 +186,9 @@ export default function AdminPage() {
     setProgress({ processed: 0, batches: 0 });
     setSummary({ fixed: 0, noApiData: 0, unchanged: 0 });
     setErrorMsg('');
+    setFixedItems([]);
+    setSubmitState('idle');
+    setSubmitMsg('');
 
     let offset = 0;
     let totalFixed = 0, totalNoApi = 0, totalUnchanged = 0, batches = 0;
@@ -195,6 +208,7 @@ export default function AdminPage() {
         totalFixed += data.fixed.length;
         totalNoApi += data.noApiData;
         totalUnchanged += data.unchanged;
+        if (data.fixed.length > 0) setFixedItems(prev => [...prev, ...data.fixed]);
 
         setProgress({ processed: offset + data.processed, batches });
         setSummary({ fixed: totalFixed, noApiData: totalNoApi, unchanged: totalUnchanged });
@@ -205,6 +219,28 @@ export default function AdminPage() {
       setRunState('done');
       if (tab === 'reviews') loadReviews();
     } catch { setErrorMsg('네트워크 오류가 발생했습니다.'); setRunState('error'); }
+  }
+
+  async function handleSubmit() {
+    const pw = sessionStorage.getItem('admin_pw') ?? password;
+    setSubmitState('loading');
+    setSubmitMsg('');
+    try {
+      const res = await fetch('/api/admin/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw, items: fixedItems }),
+      });
+      if (res.status === 401) { setAuthed(false); setSubmitState('error'); return; }
+      if (!res.ok) { setSubmitState('error'); setSubmitMsg('전송 중 오류가 발생했습니다.'); return; }
+      const json = await res.json();
+      setSubmitState('done');
+      setSubmitMsg(`${json.applied}건이 반영되었습니다.`);
+      setFixedItems([]);
+    } catch {
+      setSubmitState('error');
+      setSubmitMsg('네트워크 오류가 발생했습니다.');
+    }
   }
 
   // ── 비밀번호 화면 ──────────────────────────────────────────
@@ -321,6 +357,48 @@ export default function AdminPage() {
                 </div>
                 <p className="text-[11px] text-slate-400 text-center">총 {progress.processed}건 처리</p>
                 {errorMsg && <p className="text-xs text-red-500 font-bold">{errorMsg}</p>}
+              </div>
+            )}
+
+            {(fixedItems.length > 0 || submitState === 'done') && (
+              <div className="bg-white rounded-2xl p-5 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-black text-slate-700">
+                    오염 의심 {fixedItems.length > 0 ? `${fixedItems.length}건` : ''}
+                  </p>
+                  {fixedItems.length > 0 && (
+                    <button
+                      onClick={handleSubmit}
+                      disabled={submitState === 'loading'}
+                      className="bg-blue-500 hover:bg-blue-600 disabled:opacity-40 text-white font-black rounded-xl px-4 py-2 text-xs transition-colors"
+                    >
+                      {submitState === 'loading' ? '전송 중...' : '전송하기'}
+                    </button>
+                  )}
+                </div>
+
+                {fixedItems.length > 0 && (
+                  <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                    {fixedItems.map((item, i) => (
+                      <div key={item.b_no} className="flex items-center gap-2 border border-slate-100 rounded-lg p-2">
+                        <span className="text-[11px] font-mono text-slate-400 flex-none">{formatBizNo(item.b_no)}</span>
+                        <span className="text-xs text-red-400 line-through flex-none">{item.old_nm || '(없음)'}</span>
+                        <span className="text-slate-300 text-xs flex-none">→</span>
+                        <input
+                          value={item.new_nm}
+                          onChange={e => setFixedItems(prev => prev.map((x, j) => j === i ? { ...x, new_nm: e.target.value } : x))}
+                          className="flex-1 min-w-0 border border-slate-200 rounded px-2 py-1 text-xs text-green-700 font-bold outline-none focus:border-blue-400"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {submitMsg && (
+                  <p className={`text-xs font-bold ${submitState === 'done' ? 'text-green-600' : 'text-red-500'}`}>
+                    {submitMsg}
+                  </p>
+                )}
               </div>
             )}
           </div>

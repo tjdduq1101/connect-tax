@@ -27,6 +27,53 @@ export async function GET(request: NextRequest) {
   return Response.json({ data: data ?? [] });
 }
 
+// POST /api/admin/reviews
+// body: { password, items: [{b_no, old_nm, new_nm}] }
+// 수동 검증 결과를 business_reviews에 기록하고 businesses 테이블에 반영
+export async function POST(request: NextRequest) {
+  const body = await request.json().catch(() => ({}));
+  if (!checkPassword(body)) {
+    return Response.json({ error: '비밀번호가 올바르지 않습니다.' }, { status: 401 });
+  }
+
+  const { items } = body as { items: { b_no: string; old_nm: string | null; new_nm: string }[] };
+
+  if (!Array.isArray(items) || items.length === 0) {
+    return Response.json({ error: 'items 배열이 필요합니다.' }, { status: 400 });
+  }
+
+  const supabase = getSupabase();
+  const now = new Date().toISOString();
+
+  const { error: reviewError } = await supabase
+    .from('business_reviews')
+    .upsert(
+      items.map(item => ({
+        b_no: item.b_no,
+        current_nm: item.old_nm,
+        suggested_nm: item.new_nm,
+        suggested_sector: null,
+        suggested_type: null,
+        api_source: 'manual',
+        status: 'approved',
+        updated_at: now,
+      })),
+      { onConflict: 'b_no' }
+    );
+
+  if (reviewError) return Response.json({ error: reviewError.message }, { status: 500 });
+
+  for (const item of items) {
+    const { error: bizError } = await supabase
+      .from('businesses')
+      .update({ b_nm: item.new_nm, updated_at: now, public_api_synced_at: now })
+      .eq('b_no', item.b_no);
+    if (bizError) return Response.json({ error: bizError.message }, { status: 500 });
+  }
+
+  return Response.json({ success: true, applied: items.length });
+}
+
 // PATCH /api/admin/reviews
 // body: { password, id, action: 'approve'|'reject', b_nm?, b_sector?, b_type? }
 export async function PATCH(request: NextRequest) {

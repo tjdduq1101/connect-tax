@@ -11,7 +11,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !API_KEY) {
   process.exit(1);
 }
 
-const DAILY_LIMIT = 10000;
+const RUN_LIMIT = 1000;   // 1회 실행당 처리 건수 (하루 8회 → 일 8000건)
 const CONCURRENT = 10;
 const BATCH_SIZE = 100;
 
@@ -154,24 +154,27 @@ async function main() {
   const [progressRows] = await sbGet('/verify_progress?id=eq.1');
   const startOffset = progressRows?.current_offset ?? 0;
   const total = await countDbRecords();
-  const endOffset = Math.min(startOffset + DAILY_LIMIT, total);
+  const endOffset = Math.min(startOffset + RUN_LIMIT, total);
 
-  console.log(`\n전체: ${total}건 | 오늘 범위: ${startOffset} ~ ${endOffset - 1}건`);
+  console.log(`\n전체: ${total}건 | 이번 회차 범위: ${startOffset} ~ ${endOffset - 1}건`);
   console.log('─'.repeat(50));
 
   // 이미 처리된 b_no 로드 (재등록 방지)
   const processedNos = await fetchProcessedNos();
 
-  const corrupted = [];
+  let totalCorrupted = 0;
   let processed = 0;
   let noApiData = 0;
   let unchanged = 0;
   let offset = startOffset;
+  let totalScanned = progressRows?.total_scanned ?? 0;
 
   while (offset < endOffset) {
     const batchLimit = Math.min(BATCH_SIZE, endOffset - offset);
     const records = await fetchDbRecords(offset, batchLimit);
     if (!records.length) break;
+
+    const batchCorrupted = [];
 
     for (let i = 0; i < records.length; i += CONCURRENT) {
       const batch = records.slice(i, i + CONCURRENT);
@@ -180,7 +183,7 @@ async function main() {
         const pub = await fetchPublicInfo(record.b_no);
         if (!pub?.b_nm) { noApiData++; return; }
         if (normalizeName(pub.b_nm) === normalizeName(record.b_nm || '')) { unchanged++; return; }
-        corrupted.push({
+        batchCorrupted.push({
           b_no: record.b_no,
           current_nm: record.b_nm,
           suggested_nm: pub.b_nm,
@@ -195,26 +198,30 @@ async function main() {
     }
 
     processed += records.length;
-    process.stdout.write(`\r처리 중: ${startOffset + processed}/${total}건 (오염 의심: ${corrupted.length}건)`);
     offset += BATCH_SIZE;
-  }
+    totalScanned += records.length;
 
-  // 오염 의심 레코드 Supabase에 저장
-  if (corrupted.length > 0) {
-    await sbUpsert('business_reviews', corrupted);
-  }
+    // 중간 저장 — 이 배치의 오염 의심을 즉시 Supabase에 반영
+    if (batchCorrupted.length > 0) {
+      await sbUpsert('business_reviews', batchCorrupted);
+      totalCorrupted += batchCorrupted.length;
+    }
 
-  // 진행 상태 업데이트 (전체 완료 시 0으로 초기화)
-  const nextOffset = endOffset >= total ? 0 : endOffset;
-  await sbPatch('/verify_progress?id=eq.1', {
-    current_offset: nextOffset,
-    last_run_at: new Date().toISOString(),
-    total_scanned: (progressRows?.total_scanned ?? 0) + processed,
-  });
+    // 진행 상태 즉시 갱신 — 중도 종료 시 다음 회차가 이어받도록
+    const intermediateOffset = offset >= total ? 0 : offset;
+    await sbPatch('/verify_progress?id=eq.1', {
+      current_offset: intermediateOffset,
+      last_run_at: new Date().toISOString(),
+      total_scanned: totalScanned,
+    });
+
+    process.stdout.write(`\r처리 중: ${startOffset + processed}/${total}건 (오염 의심: ${totalCorrupted}건)`);
+  }
 
   console.log(`\n\n${'─'.repeat(50)}`);
-  console.log(`처리: ${processed}건 | 이상없음: ${unchanged}건 | 검증불가: ${noApiData}건 | 오염의심: ${corrupted.length}건`);
-  console.log(nextOffset === 0 ? '전체 스캔 완료 → 다음 실행 시 처음부터 재시작' : `다음 실행 시작 위치: ${nextOffset}번`);
+  console.log(`처리: ${processed}건 | 이상없음: ${unchanged}건 | 검증불가: ${noApiData}건 | 오염의심: ${totalCorrupted}건`);
+  const nextOffset = offset >= total ? 0 : offset;
+  console.log(nextOffset === 0 ? '전체 스캔 완료 → 다음 회차부터 처음부터 재시작' : `다음 회차 시작 위치: ${nextOffset}번`);
 }
 
 main().catch(err => { console.error(err); process.exit(1); });

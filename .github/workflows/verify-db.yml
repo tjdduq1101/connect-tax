@@ -2,13 +2,13 @@ name: DB 오염 데이터 자동 검증
 
 on:
   schedule:
-    - cron: '0 16 * * *'  # 매일 자정 KST (UTC+9 → UTC 15:00, 여유있게 16:00)
+    - cron: '0 15 * * *'  # KST 자정 (UTC 15:00) — 이후 1000건씩 8회 연속 실행
   workflow_dispatch:       # 수동 실행 버튼
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60   # 1000건 × 8회 ≈ 40분 예상, 여유 포함
 
     steps:
       - name: 코드 체크아웃
@@ -19,9 +19,14 @@ jobs:
         with:
           node-version: '20'
 
-      - name: DB 오염 검증 실행
+      - name: DB 오염 검증 실행 (1000건 × 8회 연속)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           DATA_GO_KR_API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
-        run: node scripts/verify-db.mjs
+        run: |
+          for i in 1 2 3 4 5 6 7 8; do
+            echo ""
+            echo "═══════ 회차 $i / 8 ═══════"
+            node scripts/verify-db.mjs || echo "⚠️ 회차 $i 실패 — 다음 회차 계속"
+          done
