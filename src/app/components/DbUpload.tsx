@@ -8,10 +8,17 @@ interface BusinessData {
   p_nm?: string;
   b_sector?: string;
   b_type?: string;
-  b_stt_cd?: string;
-  tax_type_cd?: string;
-  b_adr?: string;
-  start_dt?: string;
+}
+
+interface AccountHistoryEntry {
+  b_no: string;
+  account_name: string;
+  count: number;
+}
+
+interface ParseResult {
+  businesses: BusinessData[];
+  accountHistory: AccountHistoryEntry[];
 }
 
 // ============================================================
@@ -23,8 +30,19 @@ async function uploadToServerDb(businesses: BusinessData[]) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ businesses }),
   });
-  if (!res.ok) throw new Error("업로드 실패");
-  return res.json();
+  if (!res.ok) throw new Error("사업자 정보 업로드 실패");
+  return res.json() as Promise<{ count: number }>;
+}
+
+async function uploadAccountHistory(entries: AccountHistoryEntry[]) {
+  if (entries.length === 0) return { count: 0 };
+  const res = await fetch("/api/db/upload-account-history", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ entries }),
+  });
+  if (!res.ok) throw new Error("분류 이력 업로드 실패");
+  return res.json() as Promise<{ count: number }>;
 }
 
 async function getServerDbStats(): Promise<{ count: number }> {
@@ -34,22 +52,43 @@ async function getServerDbStats(): Promise<{ count: number }> {
 }
 
 // ============================================================
-// Excel parser — 사업자번호 기반, 다양한 컬럼명 지원
+// 거래처명 정규화 (합성키용)
 // ============================================================
-function parseBusinessExcel(file: File): Promise<BusinessData[]> {
+function normalizeBusinessName(nm: string): string {
+  return nm.replace(/(주식회사|유한회사|\(주\)|㈜|\s)/g, "").toLowerCase();
+}
+
+// 현금영수증 Excel에서 실제 거래처명 추출
+// 거래처 컬럼이 일반명("현금영수증(매입)" 등)이면 품명을 사용
+const GENERIC_TRADE_NAMES = ["현금영수증(매입)", "현금영수증", "현금 영수증"];
+function resolveBusinessName(tradeName: string, itemName: string): string {
+  const trimmed = tradeName.trim();
+  if (!trimmed || GENERIC_TRADE_NAMES.includes(trimmed)) {
+    return itemName.trim();
+  }
+  return trimmed;
+}
+
+// ============================================================
+// Excel parser — 신용카드 / 현금영수증 양식 모두 지원
+// ============================================================
+function parseBusinessExcel(file: File): Promise<ParseResult> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const wb = XLSX.read(e.target?.result, { type: "array" });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
-        if (rows.length === 0) return resolve([]);
+        const rows: Record<string, string | number>[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+        if (rows.length === 0) return resolve({ businesses: [], accountHistory: [] });
 
         const cols = Object.keys(rows[0] || {});
-        const map: Record<string, BusinessData> = {};
+        const bizMap: Record<string, BusinessData> = {};
+        // 동일 파일 내 (b_no, account_name) → count 집계
+        const historyMap: Record<string, number> = {};
 
         for (const r of rows) {
+          // ── 사업자번호 추출 ──────────────────────────────
           let bno = "";
           let nm = "";
           let sector = "";
@@ -61,12 +100,8 @@ function parseBusinessExcel(file: File): Promise<BusinessData[]> {
 
           if (bnoFromRaw.length === 10) {
             bno = bnoFromRaw;
-            nm = String(r["거래처"] || r["상호명"] || r["업체명"] || r["거래처명"] || "").trim();
-            sector = String(r["업태"] || "").trim();
-            type = String(r["종목"] || r["업종"] || "").trim();
-            rep = String(r["대표자"] || r["대표자명"] || "").trim();
           } else {
-            // 사업자번호 없는 경우: 다른 컬럼에서 10자리 탐색
+            // 다른 컬럼에서 10자리 탐색
             for (const col of cols) {
               const val = String(r[col] || "").replace(/[^0-9]/g, "");
               if (val.length === 10 && col !== "Code") {
@@ -74,28 +109,49 @@ function parseBusinessExcel(file: File): Promise<BusinessData[]> {
                 break;
               }
             }
-            nm = String(r["거래처명"] || r["거래처"] || r["상호명"] || r["업체명"] || "").trim();
-            sector = String(r["업태"] || "").trim();
-            type = String(r["종목"] || r["업종"] || "").trim();
-            rep = String(r["대표자"] || r["대표자명"] || "").trim();
-
-            // 사업자번호가 없어도 상호명이 있으면 합성키로 저장
-            if (!bno && nm) {
-              bno = "nm_" + nm.replace(/(주식회사|유한회사|\(주\)|㈜|\s)/g, "").toLowerCase();
-            }
           }
 
+          // ── 거래처명 추출 (신용카드: 거래처, 현금영수증: 거래처 or 품명) ──
+          const rawTrade = String(r["거래처"] || r["상호명"] || r["거래처명"] || r["업체명"] || "").trim();
+          const rawItem = String(r["품명"] || "").trim();
+          nm = resolveBusinessName(rawTrade, rawItem);
+
+          sector = String(r["업태"] || "").trim();
+          type = String(r["종목"] || r["업종"] || "").trim();
+          rep = String(r["대표자"] || r["대표자명"] || "").trim();
+
+          // 사업자번호 없으면 상호명 합성키
+          if (!bno && nm) {
+            bno = "nm_" + normalizeBusinessName(nm);
+          }
           if (!bno) continue;
-          if (!map[bno]) {
-            map[bno] = { b_no: bno, b_nm: nm, b_sector: sector, b_type: type, p_nm: rep };
+
+          // ── businesses 집계 ──────────────────────────────
+          if (!bizMap[bno]) {
+            bizMap[bno] = { b_no: bno, b_nm: nm, b_sector: sector, b_type: type, p_nm: rep };
           } else {
-            if (nm && !map[bno].b_nm) map[bno].b_nm = nm;
-            if (sector && !map[bno].b_sector) map[bno].b_sector = sector;
-            if (type && !map[bno].b_type) map[bno].b_type = type;
-            if (rep && !map[bno].p_nm) map[bno].p_nm = rep;
+            if (nm && !bizMap[bno].b_nm) bizMap[bno].b_nm = nm;
+            if (sector && !bizMap[bno].b_sector) bizMap[bno].b_sector = sector;
+            if (type && !bizMap[bno].b_type) bizMap[bno].b_type = type;
+            if (rep && !bizMap[bno].p_nm) bizMap[bno].p_nm = rep;
+          }
+
+          // ── 차변계정 빈도수 집계 ─────────────────────────
+          const accountName = String(r["차변계정"] || "").trim();
+          if (accountName) {
+            const key = `${bno}|||${accountName}`;
+            historyMap[key] = (historyMap[key] ?? 0) + 1;
           }
         }
-        resolve(Object.values(map));
+
+        const accountHistory: AccountHistoryEntry[] = Object.entries(historyMap).map(
+          ([key, count]) => {
+            const [b_no, account_name] = key.split("|||");
+            return { b_no, account_name, count };
+          }
+        );
+
+        resolve({ businesses: Object.values(bizMap), accountHistory });
       } catch {
         reject(new Error("파일을 읽는 중 오류가 발생했습니다."));
       }
@@ -110,7 +166,12 @@ function parseBusinessExcel(file: File): Promise<BusinessData[]> {
 // ============================================================
 export default function DbUpload({ onBack }: { onBack: () => void }) {
   const [dragging, setDragging] = useState(false);
-  const [status, setStatus] = useState<{ count: number; total: number; files: number } | null>(null);
+  const [status, setStatus] = useState<{
+    bizCount: number;
+    historyCount: number;
+    total: number;
+    files: number;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [dbCount, setDbCount] = useState(0);
@@ -125,20 +186,49 @@ export default function DbUpload({ onBack }: { onBack: () => void }) {
     if (files.length === 0) { setError("xlsx 파일만 업로드 가능합니다."); return; }
     setLoading(true); setError(""); setStatus(null);
     try {
-      const allEntries: Record<string, BusinessData> = {};
+      const allBiz: Record<string, BusinessData> = {};
+      const allHistoryMap: Record<string, number> = {};
+
       for (const file of files) {
-        const entries = await parseBusinessExcel(file);
-        for (const e of entries) allEntries[e.b_no] = e;
+        const { businesses, accountHistory } = await parseBusinessExcel(file);
+        for (const b of businesses) allBiz[b.b_no] = b;
+        for (const h of accountHistory) {
+          const key = `${h.b_no}|||${h.account_name}`;
+          allHistoryMap[key] = (allHistoryMap[key] ?? 0) + h.count;
+        }
       }
-      const merged = Object.values(allEntries);
-      if (merged.length === 0) { setError("사업자번호 데이터를 찾을 수 없습니다."); return; }
-      const result = await uploadToServerDb(merged);
-      const stats = await getServerDbStats();
-      setStatus({ count: result.count, total: stats.count, files: files.length });
+
+      const mergedBiz = Object.values(allBiz);
+      const mergedHistory: AccountHistoryEntry[] = Object.entries(allHistoryMap).map(
+        ([key, count]) => {
+          const [b_no, account_name] = key.split("|||");
+          return { b_no, account_name, count };
+        }
+      );
+
+      if (mergedBiz.length === 0 && mergedHistory.length === 0) {
+        setError("인식 가능한 데이터를 찾을 수 없습니다.");
+        return;
+      }
+
+      const [bizResult, histResult, stats] = await Promise.all([
+        mergedBiz.length > 0 ? uploadToServerDb(mergedBiz) : Promise.resolve({ count: 0 }),
+        mergedHistory.length > 0 ? uploadAccountHistory(mergedHistory) : Promise.resolve({ count: 0 }),
+        getServerDbStats(),
+      ]);
+
+      setStatus({
+        bizCount: bizResult.count,
+        historyCount: histResult.count,
+        total: stats.count,
+        files: files.length,
+      });
       setDbCount(stats.count);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "업로드 실패");
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -153,9 +243,9 @@ export default function DbUpload({ onBack }: { onBack: () => void }) {
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         {/* Header */}
         <div className="bg-violet-600 p-8 text-center text-white">
-          <h1 className="text-2xl font-black mb-1">거래처 DB 관리</h1>
+          <h1 className="text-2xl font-black mb-1">분류DB 관리</h1>
           <p className="text-violet-200 text-xs font-bold uppercase tracking-widest opacity-80">
-            Business Database Upload
+            Classification Database Upload
           </p>
         </div>
 
@@ -165,7 +255,10 @@ export default function DbUpload({ onBack }: { onBack: () => void }) {
             <span className="text-2xl">🗂</span>
             <div>
               <p className="text-xs font-bold text-slate-400">현재 저장된 거래처</p>
-              <p className="text-2xl font-black text-slate-800">{dbCount.toLocaleString()}<span className="text-sm font-bold text-slate-400 ml-1">개</span></p>
+              <p className="text-2xl font-black text-slate-800">
+                {dbCount.toLocaleString()}
+                <span className="text-sm font-bold text-slate-400 ml-1">개</span>
+              </p>
             </div>
           </div>
 
@@ -173,9 +266,8 @@ export default function DbUpload({ onBack }: { onBack: () => void }) {
           <div className="bg-violet-50 border border-violet-100 rounded-2xl p-4 space-y-2">
             <p className="text-xs font-black text-violet-700">📋 지원 파일 형식</p>
             <ul className="text-[11px] text-violet-600 font-bold space-y-1 ml-2">
-              <li>· 사업자등록번호 컬럼이 있는 모든 .xlsx 파일</li>
-              <li>· 사업자등록번호 / 상호 중 하나 필수</li>
-              <li>· 상호명, 업태, 종목, 대표자 컬럼 자동 인식</li>
+              <li>· 신용카드(매입) 또는 현금영수증(매입) .xlsx</li>
+              <li>· 차변계정 컬럼이 있으면 분류 이력도 함께 저장</li>
               <li>· 여러 파일 동시 업로드 가능</li>
             </ul>
           </div>
@@ -217,15 +309,20 @@ export default function DbUpload({ onBack }: { onBack: () => void }) {
           {status && (
             <div className="bg-green-50 border border-green-100 rounded-2xl p-4 space-y-2">
               <p className="text-xs font-black text-green-700">✅ 업로드 완료</p>
-              <div className="flex gap-3 flex-wrap">
+              <div className="flex gap-2 flex-wrap">
                 {status.files > 1 && (
                   <span className="bg-blue-50 text-blue-600 text-xs font-bold px-3 py-1 rounded-full">
                     📁 {status.files}개 파일
                   </span>
                 )}
                 <span className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full">
-                  ✅ {status.count}건 추가
+                  🏢 사업자 {status.bizCount}건
                 </span>
+                {status.historyCount > 0 && (
+                  <span className="bg-indigo-100 text-indigo-700 text-xs font-bold px-3 py-1 rounded-full">
+                    📒 분류이력 {status.historyCount}건
+                  </span>
+                )}
                 <span className="bg-slate-100 text-slate-600 text-xs font-bold px-3 py-1 rounded-full">
                   🗂 총 {status.total}개
                 </span>

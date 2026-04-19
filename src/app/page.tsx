@@ -5,6 +5,7 @@ import BusinessLookup from './components/BusinessLookup';
 import AccountRecommend from './components/AccountRecommend';
 import CashReceiptClassifier from './components/CashReceiptClassifier';
 import DbUpload from './components/DbUpload';
+import BusinessInfoUpload from './components/BusinessInfoUpload';
 import BizStatusBulkChecker from './components/BizStatusBulkChecker';
 
 // --- [공통 함수] ---
@@ -659,7 +660,7 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
 // =============================================
 // 메인 페이지
 // =============================================
-type TabKey = 'home' | 'regularSalary' | 'salary' | 'freelancer' | 'wageAllowance' | 'dbUpload' | 'businessLookup' | 'bizStatusBulk' | 'accountRecommend' | 'cashReceiptClassifier';
+type TabKey = 'home' | 'regularSalary' | 'salary' | 'freelancer' | 'wageAllowance' | 'dbUpload' | 'businessInfoUpload' | 'businessLookup' | 'bizStatusBulk' | 'accountRecommend' | 'cashReceiptClassifier';
 type CategoryKey = 'home' | 'labor' | 'tax';
 type MenuGroup = { category: CategoryKey; label: string; color: string; items: { key: TabKey; icon: string; title: string; desc: string }[] };
 
@@ -680,7 +681,8 @@ const menuGroups: MenuGroup[] = [
     label: '세무 관리',
     color: '#7C3AED',
     items: [
-      { key: 'dbUpload', icon: '\uD83D\uDDC4\uFE0F', title: '거래처 DB 관리', desc: '사업자 정보 엑셀 업로드 및 DB 구축' },
+      { key: 'dbUpload', icon: '\uD83D\uDDC4\uFE0F', title: '분류DB 관리', desc: '신용카드·현금영수증 정답지 업로드' },
+      { key: 'businessInfoUpload', icon: '\uD83C\uDFE2', title: '사업자DB 관리', desc: '국세청 카드내역으로 사업자 정보 구축' },
       { key: 'businessLookup', icon: '\uD83D\uDD0D', title: '사업자 조회', desc: '사업자등록번호 조회 및 업종 분류' },
       { key: 'bizStatusBulk', icon: '\uD83C\uDFE2', title: '사업자상태조회', desc: '폐업·휴업·과세유형 일괄 조회' },
       { key: 'accountRecommend', icon: '\uD83D\uDCCB', title: '카드전표 계정과목 분류', desc: '카드매입 엑셀 자동 분류 및 SmartA10 변환' },
@@ -805,6 +807,7 @@ export default function MainPage() {
               {activeTab === 'freelancer' && <FreelancerCalc onBack={goHome} />}
               {activeTab === 'wageAllowance' && <WageAndAllowanceCalc onBack={goHome} />}
               {activeTab === 'dbUpload' && <DbUpload onBack={goHome} />}
+              {activeTab === 'businessInfoUpload' && <BusinessInfoUpload onBack={goHome} />}
               {activeTab === 'businessLookup' && <BusinessLookup onBack={goHome} />}
               {activeTab === 'accountRecommend' && <AccountRecommend onBack={goHome} />}
               {activeTab === 'cashReceiptClassifier' && <CashReceiptClassifier onBack={goHome} />}
