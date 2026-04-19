@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 
 interface BusinessInfoEntry {
@@ -11,7 +11,7 @@ interface BusinessInfoEntry {
   b_type?: string;
 }
 
-type FileType = "card_nts" | "biz_reg" | "unknown";
+type FileType = "card_nts" | "cash_nts" | "biz_reg" | "unknown";
 
 // ============================================================
 // 파일명에서 날짜 숫자 추출 (YYYYMMDD 기준, 8자리 최대값)
@@ -30,7 +30,8 @@ function extractFileDateNum(filename: string): number {
 function detectFileType(rawRows: string[][]): FileType {
   for (const row of rawRows.slice(0, 5)) {
     const cells = row.map((c) => String(c));
-    if (cells.some((c) => c.includes("가맹점사업자번호"))) return "card_nts";
+    if (cells.some((c) => c === "가맹점사업자번호" || c.includes("가맹점사업자번호"))) return "card_nts";
+    if (cells.some((c) => c === "가맹점 사업자번호" || c.includes("가맹점 사업자번호"))) return "cash_nts";
     if (
       cells.some((c) => c.includes("거래처명")) &&
       cells.some((c) => c.includes("사업자등록번호"))
@@ -80,6 +81,45 @@ function parseCardNtsRows(
       b_nm: colNm >= 0 ? String(row[colNm] ?? "").trim() || undefined : undefined,
       biz_type: colBizType >= 0 ? String(row[colBizType] ?? "").trim() || undefined : undefined,
       b_sector: colSector >= 0 ? String(row[colSector] ?? "").trim() || undefined : undefined,
+      b_type: colType >= 0 ? String(row[colType] ?? "").trim() || undefined : undefined,
+    };
+  }
+  return Object.values(map);
+}
+
+// ============================================================
+// 국세청 현금영수증 세액공제내역 파서 (cash_nts)
+// 컬럼: 가맹점명, 가맹점 사업자번호(공백 있음), 가맹점유형, 가맹점업종
+// ============================================================
+function parseCashNtsRows(rawRows: string[][]): BusinessInfoEntry[] {
+  let headerRowIdx = -1;
+  for (let i = 0; i < Math.min(rawRows.length, 5); i++) {
+    if (rawRows[i].some((c) => String(c).includes("가맹점 사업자번호"))) {
+      headerRowIdx = i;
+      break;
+    }
+  }
+  if (headerRowIdx === -1) return [];
+
+  const headers = rawRows[headerRowIdx].map((h) => String(h).trim());
+  const dataRows = rawRows.slice(headerRowIdx + 1);
+
+  const idx = (name: string) => headers.indexOf(name);
+  const colBno = idx("가맹점 사업자번호");
+  const colNm = idx("가맹점명");
+  const colBizType = idx("가맹점유형");
+  const colType = idx("가맹점업종");
+
+  if (colBno === -1) return [];
+
+  const map: Record<string, BusinessInfoEntry> = {};
+  for (const row of dataRows) {
+    const bnoRaw = String(row[colBno] ?? "").replace(/[^0-9]/g, "");
+    if (bnoRaw.length !== 10) continue;
+    map[bnoRaw] = {
+      b_no: bnoRaw,
+      b_nm: colNm >= 0 ? String(row[colNm] ?? "").trim() || undefined : undefined,
+      biz_type: colBizType >= 0 ? String(row[colBizType] ?? "").trim() || undefined : undefined,
       b_type: colType >= 0 ? String(row[colType] ?? "").trim() || undefined : undefined,
     };
   }
@@ -152,6 +192,7 @@ function parseFile(
 
         let entries: BusinessInfoEntry[] = [];
         if (type === "card_nts") entries = parseCardNtsRows(rawRows);
+        else if (type === "cash_nts") entries = parseCashNtsRows(rawRows);
         else if (type === "biz_reg") entries = parseBizRegRows(rawRows);
 
         resolve({ type, entries, dateNum });
@@ -165,8 +206,14 @@ function parseFile(
 }
 
 // ============================================================
-// API helper
+// API helpers
 // ============================================================
+async function getBusinessInfoStats(): Promise<{ count: number }> {
+  const res = await fetch("/api/db/stats?table=business_info");
+  if (!res.ok) return { count: 0 };
+  return res.json();
+}
+
 async function uploadBusinessInfo(businesses: BusinessInfoEntry[]) {
   const res = await fetch("/api/db/upload-business-info", {
     method: "POST",
@@ -182,15 +229,21 @@ async function uploadBusinessInfo(businesses: BusinessInfoEntry[]) {
 // ============================================================
 export default function BusinessInfoUpload({ onBack }: { onBack: () => void }) {
   const [dragging, setDragging] = useState(false);
+  const [dbCount, setDbCount] = useState(0);
   const [status, setStatus] = useState<{
     count: number;
     files: number;
     bizRegCount: number;
     cardNtsCount: number;
+    cashNtsCount: number;
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    getBusinessInfoStats().then((s) => setDbCount(s.count || 0)).catch(() => {});
+  }, []);
 
   const handleFiles = async (fileList: FileList) => {
     const files = Array.from(fileList).filter((f) => f.name.match(/\.xlsx?$|\.xls$/i));
@@ -204,16 +257,17 @@ export default function BusinessInfoUpload({ onBack }: { onBack: () => void }) {
       const bizRegFiles = parsed
         .filter((p) => p.type === "biz_reg")
         .sort((a, b) => a.dateNum - b.dateNum);
-      const cardNtsFiles = parsed
-        .filter((p) => p.type === "card_nts")
+      // card_nts + cash_nts 합산 후 날짜순 정렬 (서로 보완적으로 병합)
+      const ntsFiles = parsed
+        .filter((p) => p.type === "card_nts" || p.type === "cash_nts")
         .sort((a, b) => a.dateNum - b.dateNum);
 
-      if (bizRegFiles.length === 0 && cardNtsFiles.length === 0) {
-        setError("지원 형식을 찾지 못했습니다. (거래처등록 또는 사업용신용카드 세액공제내역 파일이 필요합니다.)");
+      if (bizRegFiles.length === 0 && ntsFiles.length === 0) {
+        setError("지원 형식을 찾지 못했습니다. (거래처등록 / 사업용신용카드 / 현금영수증 세액공제내역 파일이 필요합니다.)");
         return;
       }
 
-      // ── 병합: 거래처등록(기초) → 사업용신용카드(덮어씀, p_nm 보존) ──
+      // ── 병합: 거래처등록(기초) → 국세청 파일들(덮어씀, undefined는 기존 값 보존) ──
       const mergedMap: Record<string, BusinessInfoEntry> = {};
 
       for (const { entries } of bizRegFiles) {
@@ -222,13 +276,16 @@ export default function BusinessInfoUpload({ onBack }: { onBack: () => void }) {
         }
       }
 
-      for (const { entries } of cardNtsFiles) {
+      for (const { entries } of ntsFiles) {
         for (const e of entries) {
-          const existing = mergedMap[e.b_no];
+          const ex = mergedMap[e.b_no];
           mergedMap[e.b_no] = {
-            ...existing,
-            ...e,
-            p_nm: e.p_nm ?? existing?.p_nm,
+            b_no: e.b_no,
+            b_nm: e.b_nm ?? ex?.b_nm,
+            p_nm: e.p_nm ?? ex?.p_nm,
+            biz_type: e.biz_type ?? ex?.biz_type,
+            b_sector: e.b_sector ?? ex?.b_sector,
+            b_type: e.b_type ?? ex?.b_type,
           };
         }
       }
@@ -236,13 +293,18 @@ export default function BusinessInfoUpload({ onBack }: { onBack: () => void }) {
       const merged = Object.values(mergedMap);
       if (merged.length === 0) { setError("유효한 사업자번호 데이터를 찾을 수 없습니다."); return; }
 
-      const result = await uploadBusinessInfo(merged);
+      const [result, stats] = await Promise.all([
+        uploadBusinessInfo(merged),
+        getBusinessInfoStats(),
+      ]);
       setStatus({
         count: result.count,
         files: files.length,
         bizRegCount: bizRegFiles.reduce((s, f) => s + f.entries.length, 0),
-        cardNtsCount: cardNtsFiles.reduce((s, f) => s + f.entries.length, 0),
+        cardNtsCount: parsed.filter((p) => p.type === "card_nts").reduce((s, f) => s + f.entries.length, 0),
+        cashNtsCount: parsed.filter((p) => p.type === "cash_nts").reduce((s, f) => s + f.entries.length, 0),
       });
+      setDbCount(stats.count);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "업로드 실패");
     } finally {
@@ -269,12 +331,25 @@ export default function BusinessInfoUpload({ onBack }: { onBack: () => void }) {
         </div>
 
         <div className="p-6 space-y-5">
+          {/* 현재 DB 현황 */}
+          <div className="bg-slate-50 rounded-2xl p-4 flex items-center gap-3">
+            <span className="text-2xl">🏢</span>
+            <div>
+              <p className="text-xs font-bold text-slate-400">현재 저장된 사업자</p>
+              <p className="text-2xl font-black text-slate-800">
+                {dbCount.toLocaleString()}
+                <span className="text-sm font-bold text-slate-400 ml-1">개</span>
+              </p>
+            </div>
+          </div>
+
           {/* 안내 */}
           <div className="bg-violet-50 border border-violet-100 rounded-2xl p-4 space-y-2">
             <p className="text-xs font-black text-violet-700">📋 지원 파일 형식</p>
             <ul className="text-[11px] text-violet-600 font-bold space-y-1 ml-2">
               <li>· 거래처등록 .xlsx — 기초 데이터 (거래처명·대표자)</li>
               <li>· 국세청 사업용신용카드 세액공제내역 .xls — 덮어쓰기 (업태·업종 추가)</li>
+              <li>· 국세청 현금영수증 세액공제내역 .xls — 덮어쓰기 (유형·업종 추가)</li>
               <li>· 동일 사업자번호: 파일명 날짜 기준 최신 데이터 반영</li>
               <li>· 여러 파일 동시 업로드 가능</li>
             </ul>
@@ -331,6 +406,11 @@ export default function BusinessInfoUpload({ onBack }: { onBack: () => void }) {
                 {status.cardNtsCount > 0 && (
                   <span className="bg-violet-100 text-violet-700 text-xs font-bold px-3 py-1 rounded-full">
                     💳 카드내역 {status.cardNtsCount}건
+                  </span>
+                )}
+                {status.cashNtsCount > 0 && (
+                  <span className="bg-teal-100 text-teal-700 text-xs font-bold px-3 py-1 rounded-full">
+                    🧾 현금영수증 {status.cashNtsCount}건
                   </span>
                 )}
                 <span className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full">

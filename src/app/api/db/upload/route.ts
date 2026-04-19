@@ -101,8 +101,26 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
-    // 응답 후 백그라운드에서 공공API 대조 검증
-    after(() => verifyAndSaveReviews(rows.map(r => ({ b_no: r.b_no, b_nm: r.b_nm }))));
+    // 응답 후 백그라운드에서: 공공API 대조 검증 + business_info 채우기(덮어쓰지 않음)
+    after(async () => {
+      await verifyAndSaveReviews(rows.map(r => ({ b_no: r.b_no, b_nm: r.b_nm })));
+
+      const realBizRows = rows
+        .filter(r => !r.b_no.startsWith('nm_'))
+        .map(r => ({
+          b_no: r.b_no,
+          b_nm: r.b_nm,
+          p_nm: r.p_nm,
+          b_sector: r.b_sector,
+          b_type: r.b_type,
+          updated_at: r.updated_at,
+        }));
+      if (realBizRows.length > 0) {
+        await supabase
+          .from('business_info')
+          .upsert(realBizRows, { onConflict: 'b_no', ignoreDuplicates: true });
+      }
+    });
 
     return Response.json({ success: true, count: rows.length });
   } catch (err: unknown) {
