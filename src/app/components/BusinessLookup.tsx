@@ -209,12 +209,6 @@ async function searchNaver(name: string, isCorpHint?: boolean): Promise<NaverRes
   return [items[0]];
 }
 
-async function getServerDbStats(): Promise<{ count: number }> {
-  const res = await fetch('/api/db/stats');
-  if (!res.ok) return { count: 0 };
-  return res.json();
-}
-
 // ============================================================
 // Sub-components
 // ============================================================
@@ -281,12 +275,10 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
   const [naverLoading, setNaverLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [dbCount, setDbCount] = useState(0);
   const [manualName, setManualName] = useState('');
   const [matchingRules, setMatchingRules] = useState<MatchingRule[]>([]);
 
   useEffect(() => {
-    getServerDbStats().then((s) => setDbCount(s.count || 0)).catch(() => {});
     fetch('/api/notion/rules')
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data?.rules) setMatchingRules(convertNotionRules(data.rules)); })
