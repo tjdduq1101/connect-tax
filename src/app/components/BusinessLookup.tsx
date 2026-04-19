@@ -424,13 +424,6 @@ export default function BusinessLookup({ onBack }: { onBack: () => void }) {
         </div>
 
         <div className="p-6 space-y-5">
-          {/* DB 현황 표시 */}
-          {dbCount > 0 && (
-            <div className="bg-slate-50 rounded-xl px-4 py-2 text-[11px] font-bold text-slate-400 text-center">
-              🗂 저장된 거래처 {dbCount.toLocaleString()}개
-            </div>
-          )}
-
           {/* Search */}
           <div>
             <label className="block text-[11px] font-bold text-slate-400 ml-1 mb-1">사업자등록번호</label>
