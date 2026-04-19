@@ -3,11 +3,11 @@
 // GitHub Actions: 환경변수 직접 주입
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const API_KEY = process.env.DATA_GO_KR_API_KEY?.trim();
 
-if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !API_KEY) {
-  console.error('환경변수 누락: SUPABASE_URL, SUPABASE_ANON_KEY, DATA_GO_KR_API_KEY 필요');
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !API_KEY) {
+  console.error('환경변수 누락: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, DATA_GO_KR_API_KEY 필요');
   process.exit(1);
 }
 
@@ -16,8 +16,8 @@ const CONCURRENT = 10;
 const BATCH_SIZE = 100;
 
 const SB_HEADERS = {
-  apikey: SUPABASE_ANON_KEY,
-  Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+  apikey: SUPABASE_SERVICE_ROLE_KEY,
+  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
   'Content-Type': 'application/json',
 };
 

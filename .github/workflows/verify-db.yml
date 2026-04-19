@@ -22,7 +22,7 @@ jobs:
       - name: DB 오염 검증 실행 (1000건 × 8회 연속)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           DATA_GO_KR_API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
         run: |
           for i in 1 2 3 4 5 6 7 8; do
