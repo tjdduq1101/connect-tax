@@ -4,32 +4,44 @@ declare global {
   }
 }
 
-async function loadHtml2Canvas(): Promise<void> {
-  if (window.html2canvas) return;
-  await new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>('script[data-html2canvas]');
-    if (existing) {
-      // 태그는 있지만 아직 로딩 중인 경우 완료 이벤트 대기
-      existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener('error', () => reject(new Error('html2canvas 로드 실패')), { once: true });
-      return;
-    }
+const SCRIPT_SOURCES = [
+  '/html2canvas.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+  'https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js',
+];
+
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.dataset.html2canvas = '1';
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+    s.src = src;
+    s.async = true;
     s.onload = () => resolve();
-    s.onerror = () => reject(new Error('html2canvas 로드 실패'));
+    s.onerror = () => reject(new Error(`script load failed: ${src}`));
     document.head.appendChild(s);
   });
 }
 
-// 캔버스에 둥근 모서리 클리핑 적용 (rounded-3xl = 24px, scale 2 = 48px)
+async function loadHtml2Canvas(): Promise<void> {
+  if (window.html2canvas) return;
+  let lastError: unknown = null;
+  for (const src of SCRIPT_SOURCES) {
+    try {
+      await loadScript(src);
+      if (window.html2canvas) return;
+    } catch (err) {
+      lastError = err;
+      console.warn('[downloadAsImage] 스크립트 로드 실패:', src, err);
+    }
+  }
+  throw new Error(`html2canvas 로드 실패: ${String(lastError)}`);
+}
+
 function applyRoundedCorners(src: HTMLCanvasElement, radius: number): HTMLCanvasElement {
   const dst = document.createElement('canvas');
   dst.width = src.width;
   dst.height = src.height;
   const ctx = dst.getContext('2d')!;
-  const w = src.width, h = src.height, r = radius;
+  const w = src.width, h = src.height, r = Math.min(radius, w / 2, h / 2);
   ctx.beginPath();
   ctx.moveTo(r, 0);
   ctx.lineTo(w - r, 0);
@@ -46,36 +58,61 @@ function applyRoundedCorners(src: HTMLCanvasElement, radius: number): HTMLCanvas
   return dst;
 }
 
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export async function downloadAsImage(el: HTMLElement, filename: string): Promise<void> {
   try {
     await loadHtml2Canvas();
-  } catch {
-    alert('이미지 저장에 실패했습니다. 인터넷 연결을 확인해주세요.');
+  } catch (err) {
+    console.error('[downloadAsImage] html2canvas 로드 실패', err);
+    alert('이미지 저장 라이브러리를 불러오지 못했습니다. 인터넷 연결 또는 광고 차단기 설정을 확인해주세요.');
     return;
   }
   if (!window.html2canvas) {
     alert('이미지 저장에 실패했습니다.');
     return;
   }
-  const raw = await window.html2canvas(el, { backgroundColor: null, scale: 2, useCORS: true });
-  const canvas = applyRoundedCorners(raw, 48);
-  canvas.toBlob((blob: Blob | null) => {
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${filename}.png`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, 'image/png');
+  try {
+    const raw = await window.html2canvas(el, {
+      backgroundColor: null,
+      scale: 2,
+      useCORS: true,
+      logging: false,
+    });
+    const rounded = applyRoundedCorners(raw, 48);
+    await new Promise<void>((resolve) => {
+      rounded.toBlob((blob) => {
+        if (!blob) {
+          alert('이미지 생성에 실패했습니다.');
+          resolve();
+          return;
+        }
+        triggerDownload(blob, `${filename}.png`);
+        resolve();
+      }, 'image/png');
+    });
+  } catch (err) {
+    console.error('[downloadAsImage] 캡처 실패', err);
+    alert('이미지 캡처 중 오류가 발생했습니다.');
+  }
 }
 
 export function printResult(el: HTMLElement): void {
   el.classList.add('print-target');
   document.body.classList.add('printing');
-  window.print();
-  window.addEventListener('afterprint', () => {
+  const cleanup = () => {
     el.classList.remove('print-target');
     document.body.classList.remove('printing');
-  }, { once: true });
+  };
+  window.addEventListener('afterprint', cleanup, { once: true });
+  window.print();
 }
