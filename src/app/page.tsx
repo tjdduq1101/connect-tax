@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useRef } from 'react';
-import { printResult } from '@/lib/downloadUtils';
+import React, { useState, useRef, useCallback } from 'react';
+import { printResult, downloadAsImage } from '@/lib/downloadUtils';
 import taxData from './data/taxData.json';
 import BusinessLookup from './components/BusinessLookup';
 import AccountRecommend from './components/AccountRecommend';
@@ -49,14 +49,27 @@ function MoneyInput({ label, value, onChange, placeholder = "0", large = false }
   );
 }
 
-function DownloadButtons({ targetRef }: { targetRef: React.RefObject<HTMLDivElement | null> }) {
+function DownloadButtons({ targetRef, filename }: { targetRef: React.RefObject<HTMLDivElement | null>; filename: string }) {
+  const [imgLoading, setImgLoading] = useState(false);
+
+  const handleImage = useCallback(async () => {
+    if (!targetRef.current || imgLoading) return;
+    setImgLoading(true);
+    try { await downloadAsImage(targetRef.current, filename); }
+    finally { setImgLoading(false); }
+  }, [targetRef, filename, imgLoading]);
+
   return (
-    <button
-      onClick={() => { if (targetRef.current) printResult(targetRef.current); }}
-      className="w-full mt-4 py-2.5 rounded-xl text-xs font-bold border-2 border-slate-200 text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-all"
-    >
-      🖨️ 인쇄 / PDF 저장
-    </button>
+    <div className="flex gap-2 mt-4">
+      <button onClick={handleImage} disabled={imgLoading}
+        className="flex-1 py-2.5 rounded-xl text-xs font-bold border-2 border-slate-200 text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-all disabled:opacity-40">
+        {imgLoading ? '저장 중...' : '🖼 이미지 저장'}
+      </button>
+      <button onClick={() => { if (targetRef.current) printResult(targetRef.current); }}
+        className="flex-1 py-2.5 rounded-xl text-xs font-bold border-2 border-slate-200 text-slate-500 hover:border-rose-400 hover:text-rose-500 transition-all">
+        🖨️ 인쇄 / PDF 저장
+      </button>
+    </div>
   );
 }
 
@@ -68,7 +81,7 @@ function SalaryCalc({ onBack }: { onBack: () => void }) {
   const [date, setDate] = useState('');
   const [type, setType] = useState<'입사' | '퇴사'>('입사');
   const [displayResult, setDisplayResult] = useState<{ total: number; details: { label: string; value: number }[] } | null>(null);
-  const resultRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -92,7 +105,7 @@ function SalaryCalc({ onBack }: { onBack: () => void }) {
   return (
     <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
       <BackButton onClick={onBack} />
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+      <div ref={cardRef} className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         <CalcHeader title="급여 일할 계산기" />
         <div className="p-8">
           <div className="flex mb-6 p-1.5 bg-slate-100 rounded-2xl">
@@ -118,22 +131,20 @@ function SalaryCalc({ onBack }: { onBack: () => void }) {
           <button onClick={handleCalculate} className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-lg shadow-lg transition-transform active:scale-95">계산하기</button>
           {displayResult && (
             <div className="space-y-4 mt-6 animate-in slide-in-from-bottom-2 duration-300">
-              <div ref={resultRef} className="space-y-4 p-1">
-                <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
-                  {displayResult.details.map((item, idx) => (
-                    <div key={idx} className="flex justify-between text-sm py-1"><span className="text-slate-600 font-medium">{item.label}</span><span className="text-slate-900 font-bold">{format(item.value)}원</span></div>
-                  ))}
-                </div>
-                <div className="p-7 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl text-center shadow-xl">
-                  <p className="text-blue-100 text-xs mb-1 font-bold tracking-widest uppercase">{type}월 총 지급액</p>
-                  <p className="text-3xl font-black text-white">{format(displayResult.total)}원</p>
-                </div>
+              <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+                {displayResult.details.map((item, idx) => (
+                  <div key={idx} className="flex justify-between text-sm py-1"><span className="text-slate-600 font-medium">{item.label}</span><span className="text-slate-900 font-bold">{format(item.value)}원</span></div>
+                ))}
               </div>
-              <DownloadButtons targetRef={resultRef} />
+              <div className="p-7 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl text-center shadow-xl">
+                <p className="text-blue-100 text-xs mb-1 font-bold tracking-widest uppercase">{type}월 총 지급액</p>
+                <p className="text-3xl font-black text-white">{format(displayResult.total)}원</p>
+              </div>
             </div>
           )}
         </div>
       </div>
+      {displayResult && <DownloadButtons targetRef={cardRef} filename="급여_일할계산_결과" />}
     </div>
   );
 }
@@ -148,8 +159,7 @@ function FreelancerCalc({ onBack }: { onBack: () => void }) {
   const [bulkMode, setBulkMode] = useState<'before' | 'after'>('before');
   const [bulkEntries, setBulkEntries] = useState([{ name: '', amount: '' }]);
   const [bulkResults, setBulkResults] = useState<{ name: string; before: number; incomeTax: number; localTax: number; totalTax: number; after: number }[]>([]);
-  const singleResultRef = useRef<HTMLDivElement>(null);
-  const bulkResultRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const calculateTaxes = (beforeAmt: number) => {
     const incomeTax = Math.floor((beforeAmt * 0.03) / 10) * 10;
@@ -199,7 +209,7 @@ function FreelancerCalc({ onBack }: { onBack: () => void }) {
   return (
     <div className={`w-full ${viewMode === 'bulk' ? 'max-w-4xl' : 'max-w-md'} transition-all animate-in fade-in slide-in-from-bottom-4 duration-500`}>
       <BackButton onClick={onBack} />
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+      <div ref={cardRef} className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         <CalcHeader title="프리랜서(3.3%) 계산기" />
         <div className="flex p-2 bg-slate-50 border-b border-slate-100">
           {(['single', 'bulk'] as const).map(v => (
@@ -221,7 +231,7 @@ function FreelancerCalc({ onBack }: { onBack: () => void }) {
                 ))}
               </div>
               <MoneyInput label="" value={inputValue} onChange={setInputValue} large />
-              <div ref={singleResultRef} className="bg-slate-50 rounded-2xl p-6 border border-slate-100 space-y-3">
+              <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 space-y-3">
                 <div className="flex justify-between text-sm font-bold text-slate-500"><span>세전 금액</span><span className="text-slate-900">{format(singleResult.before)}원</span></div>
                 <div className="flex justify-between text-xs font-bold text-rose-400"><span>&#9492; 소득세(3%)</span><span>{format(singleResult.incomeTax)}원</span></div>
                 <div className="flex justify-between text-xs font-bold text-rose-400"><span>&#9492; 지방세(0.3%)</span><span>{format(singleResult.localTax)}원</span></div>
@@ -231,7 +241,6 @@ function FreelancerCalc({ onBack }: { onBack: () => void }) {
                   <span className="text-2xl font-black text-blue-600">{format(mode === 'before' ? singleResult.after : singleResult.before)}원</span>
                 </div>
               </div>
-              {inputValue && <DownloadButtons targetRef={singleResultRef} />}
             </div>
           ) : (
             <div className="space-y-6">
@@ -275,38 +284,36 @@ function FreelancerCalc({ onBack }: { onBack: () => void }) {
               </div>
               <button onClick={handleBulkCalculate} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black text-lg shadow-lg active:scale-95 transition-transform">일괄 계산하기</button>
               {bulkResults.length > 0 && (
-                <div className="animate-in slide-in-from-bottom-2 duration-300">
-                  <div ref={bulkResultRef} className="mt-4 border rounded-2xl overflow-hidden overflow-x-auto">
-                    <table className="w-full text-sm text-right">
-                      <thead className="bg-slate-50 text-slate-400 font-bold uppercase text-[10px]">
-                        <tr>
-                          <th className="p-4 text-left">이름</th>
-                          <th className="p-4">세전금액</th>
-                          <th className="p-4 text-rose-400">소득세</th>
-                          <th className="p-4 text-rose-400">지방세</th>
-                          <th className="p-4 text-blue-600">실수령액</th>
+                <div className="mt-4 border rounded-2xl overflow-hidden overflow-x-auto animate-in slide-in-from-bottom-2 duration-300">
+                  <table className="w-full text-sm text-right">
+                    <thead className="bg-slate-50 text-slate-400 font-bold uppercase text-[10px]">
+                      <tr>
+                        <th className="p-4 text-left">이름</th>
+                        <th className="p-4">세전금액</th>
+                        <th className="p-4 text-rose-400">소득세</th>
+                        <th className="p-4 text-rose-400">지방세</th>
+                        <th className="p-4 text-blue-600">실수령액</th>
+                      </tr>
+                    </thead>
+                    <tbody className="font-bold text-slate-700">
+                      {bulkResults.map((res, i) => (
+                        <tr key={i} className="border-t border-slate-100">
+                          <td className="p-4 text-left text-slate-600">{res.name || '-'}</td>
+                          <td className="p-4">{format(res.before)}원</td>
+                          <td className="p-4 text-rose-300">{format(res.incomeTax)}원</td>
+                          <td className="p-4 text-rose-300">{format(res.localTax)}원</td>
+                          <td className="p-4 text-blue-600 bg-blue-50/30">{format(res.after)}원</td>
                         </tr>
-                      </thead>
-                      <tbody className="font-bold text-slate-700">
-                        {bulkResults.map((res, i) => (
-                          <tr key={i} className="border-t border-slate-100">
-                            <td className="p-4 text-left text-slate-600">{res.name || '-'}</td>
-                            <td className="p-4">{format(res.before)}원</td>
-                            <td className="p-4 text-rose-300">{format(res.incomeTax)}원</td>
-                            <td className="p-4 text-rose-300">{format(res.localTax)}원</td>
-                            <td className="p-4 text-blue-600 bg-blue-50/30">{format(res.after)}원</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <DownloadButtons targetRef={bulkResultRef} />
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
           )}
         </div>
       </div>
+      {(inputValue || bulkResults.length > 0) && <DownloadButtons targetRef={cardRef} filename="프리랜서_3.3_계산_결과" />}
     </div>
   );
 }
@@ -321,7 +328,7 @@ function RegularSalaryCalc({ onBack }: { onBack: () => void }) {
   const [familyCount, setFamilyCount] = useState(1);
   const [isSpecialRelation, setIsSpecialRelation] = useState(false);
   const [calculatedResult, setCalculatedResult] = useState<{ total: number; np: number; hi: number; lt: number; ei: number; it: number; local: number; totalDeduction: number; after: number } | null>(null);
-  const resultRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const getIncomeTax = (taxable: number, family: number) => {
     if (taxable < 1060000) return 0;
@@ -380,7 +387,7 @@ function RegularSalaryCalc({ onBack }: { onBack: () => void }) {
   return (
     <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
       <BackButton onClick={onBack} />
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+      <div ref={cardRef} className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         <CalcHeader title="2026년 연봉 계산기" />
         <div className="p-8 space-y-6">
           <div className="flex gap-3">
@@ -408,23 +415,21 @@ function RegularSalaryCalc({ onBack }: { onBack: () => void }) {
           </div>
           <button onClick={handleFinalCalculate} className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-lg shadow-lg transition-all active:scale-95">계산하기</button>
           {calculatedResult && (
-            <div className="animate-in fade-in zoom-in duration-300">
-              <div ref={resultRef} className="bg-slate-50 rounded-2xl p-6 border border-slate-100 space-y-3">
-                <div className="flex justify-between text-sm font-bold text-slate-500"><span>세전 총액 (과세+비과세)</span><span className="text-slate-900">{format(calculatedResult.total)}원</span></div>
-                {[{ l: '국민연금', v: calculatedResult.np, c: 'text-slate-400' }, { l: '건강보험', v: calculatedResult.hi, c: 'text-slate-400' }, { l: '장기요양', v: calculatedResult.lt, c: 'text-slate-400' }, { l: '고용보험', v: calculatedResult.ei, c: 'text-slate-400' }, { l: '소득세', v: calculatedResult.it, c: 'text-rose-400' }, { l: '지방소득세', v: calculatedResult.local, c: 'text-rose-400' }].map((item, i) => (
-                  <div key={i} className={`flex justify-between text-xs font-bold ${item.c}`}><span>&#9492; {item.l}</span><span>{format(item.v)}원</span></div>
-                ))}
-                <div className="h-px bg-slate-200 my-4" />
-                <div className="flex justify-between items-center">
-                  <span className="font-black text-slate-700">{mode === 'before' ? '최종 실수령액' : '필요한 세전 총액'}</span>
-                  <span className="text-2xl font-black text-blue-600">{format(mode === 'before' ? calculatedResult.after : calculatedResult.total)}원</span>
-                </div>
+            <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 space-y-3 animate-in fade-in zoom-in duration-300">
+              <div className="flex justify-between text-sm font-bold text-slate-500"><span>세전 총액 (과세+비과세)</span><span className="text-slate-900">{format(calculatedResult.total)}원</span></div>
+              {[{ l: '국민연금', v: calculatedResult.np, c: 'text-slate-400' }, { l: '건강보험', v: calculatedResult.hi, c: 'text-slate-400' }, { l: '장기요양', v: calculatedResult.lt, c: 'text-slate-400' }, { l: '고용보험', v: calculatedResult.ei, c: 'text-slate-400' }, { l: '소득세', v: calculatedResult.it, c: 'text-rose-400' }, { l: '지방소득세', v: calculatedResult.local, c: 'text-rose-400' }].map((item, i) => (
+                <div key={i} className={`flex justify-between text-xs font-bold ${item.c}`}><span>&#9492; {item.l}</span><span>{format(item.v)}원</span></div>
+              ))}
+              <div className="h-px bg-slate-200 my-4" />
+              <div className="flex justify-between items-center">
+                <span className="font-black text-slate-700">{mode === 'before' ? '최종 실수령액' : '필요한 세전 총액'}</span>
+                <span className="text-2xl font-black text-blue-600">{format(mode === 'before' ? calculatedResult.after : calculatedResult.total)}원</span>
               </div>
-              <DownloadButtons targetRef={resultRef} />
             </div>
           )}
         </div>
       </div>
+      {calculatedResult && <DownloadButtons targetRef={cardRef} filename="연봉_계산_결과" />}
     </div>
   );
 }
@@ -454,9 +459,7 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
   const [isSmallBiz, setIsSmallBiz] = useState(false);
   const [entries, setEntries] = useState([{ type: 'extended' as string, hours: '' }]);
   const [overtimeResult, setOvertimeResult] = useState<{ details: { label: string; hours: number; rate: number; amount: number }[]; total: number } | null>(null);
-  const ordinaryResultRef = useRef<HTMLDivElement>(null);
-  const annualResultRef = useRef<HTMLDivElement>(null);
-  const overtimeResultRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   // 통상임금 결과가 나오면 다른 탭의 시간급에 자동 반영
   const applyOrdinaryToOthers = (hw: number) => {
@@ -522,7 +525,7 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
   return (
     <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
       <BackButton onClick={onBack} />
-      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+      <div ref={cardRef} className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         <CalcHeader title="통상임금 산출 및 수당 계산기" />
         {/* 서브탭 */}
         <div className="flex p-2 bg-slate-50 border-b border-slate-100">
@@ -556,25 +559,22 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
               <button onClick={calcOrdinary} className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-lg shadow-lg transition-all active:scale-95">계산하기</button>
               {ordinaryResult && (
                 <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300">
-                  <div ref={ordinaryResultRef} className="space-y-4 p-1">
-                    <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-2">
-                      <div className="flex justify-between text-sm"><span className="text-slate-500 font-medium">월 통상임금</span><span className="text-slate-900 font-bold">{format(ordinaryResult.monthlyOrdinary)}원</span></div>
-                      <div className="flex justify-between text-sm"><span className="text-slate-500 font-medium">주 유급시간</span><span className="text-slate-900 font-bold">{ordinaryResult.weeklyPaidHours}시간</span></div>
-                      <div className="flex justify-between text-sm"><span className="text-slate-500 font-medium">월 소정근로시간</span><span className="text-slate-900 font-bold">{ordinaryResult.monthlyHours}시간</span></div>
+                  <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-2">
+                    <div className="flex justify-between text-sm"><span className="text-slate-500 font-medium">월 통상임금</span><span className="text-slate-900 font-bold">{format(ordinaryResult.monthlyOrdinary)}원</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-slate-500 font-medium">주 유급시간</span><span className="text-slate-900 font-bold">{ordinaryResult.weeklyPaidHours}시간</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-slate-500 font-medium">월 소정근로시간</span><span className="text-slate-900 font-bold">{ordinaryResult.monthlyHours}시간</span></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-5 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl text-center shadow-xl">
+                      <p className="text-blue-100 text-[10px] mb-1 font-bold tracking-widest uppercase">시간급</p>
+                      <p className="text-xl font-black text-white">{format(ordinaryResult.hourlyWage)}원</p>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="p-5 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl text-center shadow-xl">
-                        <p className="text-blue-100 text-[10px] mb-1 font-bold tracking-widest uppercase">시간급</p>
-                        <p className="text-xl font-black text-white">{format(ordinaryResult.hourlyWage)}원</p>
-                      </div>
-                      <div className="p-5 bg-gradient-to-br from-slate-700 to-slate-900 rounded-2xl text-center shadow-xl">
-                        <p className="text-slate-300 text-[10px] mb-1 font-bold tracking-widest uppercase">일급</p>
-                        <p className="text-xl font-black text-white">{format(ordinaryResult.dailyWage)}원</p>
-                      </div>
+                    <div className="p-5 bg-gradient-to-br from-slate-700 to-slate-900 rounded-2xl text-center shadow-xl">
+                      <p className="text-slate-300 text-[10px] mb-1 font-bold tracking-widest uppercase">일급</p>
+                      <p className="text-xl font-black text-white">{format(ordinaryResult.dailyWage)}원</p>
                     </div>
                   </div>
                   <p className="text-[10px] text-center text-blue-500 font-bold">* 시간급이 연차수당/추가근무수당 탭에 자동 반영됩니다</p>
-                  <DownloadButtons targetRef={ordinaryResultRef} />
                 </div>
               )}
             </div>
@@ -611,18 +611,15 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
               <button onClick={calcAnnual} className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-lg shadow-lg transition-all active:scale-95">계산하기</button>
               {annualResult && (
                 <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300">
-                  <div ref={annualResultRef} className="space-y-4 p-1">
-                    <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-2">
-                      <div className="flex justify-between text-sm"><span className="text-slate-500 font-medium">미사용 연차일수</span><span className="text-blue-600 font-black">{annualResult.unusedDays}일</span></div>
-                      <div className="flex justify-between text-sm"><span className="text-slate-500 font-medium">1일 통상임금</span><span className="text-slate-900 font-bold">{format(annualResult.dailyWage)}원</span></div>
-                    </div>
-                    <div className="p-7 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl text-center shadow-xl">
-                      <p className="text-blue-100 text-xs mb-1 font-bold tracking-widest uppercase">미사용 연차수당</p>
-                      <p className="text-3xl font-black text-white">{format(annualResult.totalPay)}원</p>
-                      <p className="text-blue-200 text-[10px] mt-2 font-bold">{annualResult.unusedDays}일 x {format(annualResult.dailyWage)}원</p>
-                    </div>
+                  <div className="bg-slate-50 rounded-2xl p-5 border border-slate-100 space-y-2">
+                    <div className="flex justify-between text-sm"><span className="text-slate-500 font-medium">미사용 연차일수</span><span className="text-blue-600 font-black">{annualResult.unusedDays}일</span></div>
+                    <div className="flex justify-between text-sm"><span className="text-slate-500 font-medium">1일 통상임금</span><span className="text-slate-900 font-bold">{format(annualResult.dailyWage)}원</span></div>
                   </div>
-                  <DownloadButtons targetRef={annualResultRef} />
+                  <div className="p-7 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl text-center shadow-xl">
+                    <p className="text-blue-100 text-xs mb-1 font-bold tracking-widest uppercase">미사용 연차수당</p>
+                    <p className="text-3xl font-black text-white">{format(annualResult.totalPay)}원</p>
+                    <p className="text-blue-200 text-[10px] mt-2 font-bold">{annualResult.unusedDays}일 x {format(annualResult.dailyWage)}원</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -661,36 +658,34 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
               <button onClick={calcOvertime} className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-lg shadow-lg transition-all active:scale-95">계산하기</button>
               {overtimeResult && overtimeResult.details.length > 0 && (
                 <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300">
-                  <div ref={overtimeResultRef} className="space-y-4 p-1">
-                    <div className="border rounded-2xl overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase">
-                          <tr><th className="p-3 text-left">구분</th><th className="p-3 text-right">시간</th><th className="p-3 text-right">배율</th><th className="p-3 text-right">금액</th></tr>
-                        </thead>
-                        <tbody className="font-bold text-slate-700">
-                          {overtimeResult.details.map((d, i) => (
-                            <tr key={i} className="border-t border-slate-50">
-                              <td className="p-3 text-xs">{d.label}</td>
-                              <td className="p-3 text-right">{d.hours}h</td>
-                              <td className="p-3 text-right text-slate-400">x{d.rate}</td>
-                              <td className="p-3 text-right text-blue-600">{format(d.amount)}원</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="p-7 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl text-center shadow-xl">
-                      <p className="text-blue-100 text-xs mb-1 font-bold tracking-widest uppercase">추가근무수당 합계</p>
-                      <p className="text-3xl font-black text-white">{format(overtimeResult.total)}원</p>
-                    </div>
+                  <div className="border rounded-2xl overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 text-slate-400 font-bold text-[10px] uppercase">
+                        <tr><th className="p-3 text-left">구분</th><th className="p-3 text-right">시간</th><th className="p-3 text-right">배율</th><th className="p-3 text-right">금액</th></tr>
+                      </thead>
+                      <tbody className="font-bold text-slate-700">
+                        {overtimeResult.details.map((d, i) => (
+                          <tr key={i} className="border-t border-slate-50">
+                            <td className="p-3 text-xs">{d.label}</td>
+                            <td className="p-3 text-right">{d.hours}h</td>
+                            <td className="p-3 text-right text-slate-400">x{d.rate}</td>
+                            <td className="p-3 text-right text-blue-600">{format(d.amount)}원</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                  <DownloadButtons targetRef={overtimeResultRef} />
+                  <div className="p-7 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl text-center shadow-xl">
+                    <p className="text-blue-100 text-xs mb-1 font-bold tracking-widest uppercase">추가근무수당 합계</p>
+                    <p className="text-3xl font-black text-white">{format(overtimeResult.total)}원</p>
+                  </div>
                 </div>
               )}
             </div>
           )}
         </div>
       </div>
+      {(ordinaryResult ?? annualResult ?? overtimeResult) && <DownloadButtons targetRef={cardRef} filename="수당_계산_결과" />}
     </div>
   );
 }
