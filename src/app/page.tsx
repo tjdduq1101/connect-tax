@@ -1,6 +1,5 @@
 "use client";
-import React, { useState, useRef, useCallback } from 'react';
-import { printResult, downloadAsImage } from '@/lib/downloadUtils';
+import React, { useState } from 'react';
 import taxData from './data/taxData.json';
 import BusinessLookup from './components/BusinessLookup';
 import AccountRecommend from './components/AccountRecommend';
@@ -49,30 +48,6 @@ function MoneyInput({ label, value, onChange, placeholder = "0", large = false }
   );
 }
 
-function DownloadButtons({ targetRef, filename }: { targetRef: React.RefObject<HTMLDivElement | null>; filename: string }) {
-  const [imgLoading, setImgLoading] = useState(false);
-
-  const handleImage = useCallback(async () => {
-    if (!targetRef.current || imgLoading) return;
-    setImgLoading(true);
-    try { await downloadAsImage(targetRef.current, filename); }
-    finally { setImgLoading(false); }
-  }, [targetRef, filename, imgLoading]);
-
-  return (
-    <div className="flex gap-2 mt-4">
-      <button onClick={handleImage} disabled={imgLoading}
-        className="flex-1 py-2.5 rounded-xl text-xs font-bold border-2 border-slate-200 text-slate-500 hover:border-blue-400 hover:text-blue-600 transition-all disabled:opacity-40">
-        {imgLoading ? '저장 중...' : '🖼 이미지 저장'}
-      </button>
-      <button onClick={() => { if (targetRef.current) printResult(targetRef.current); }}
-        className="flex-1 py-2.5 rounded-xl text-xs font-bold border-2 border-slate-200 text-slate-500 hover:border-rose-400 hover:text-rose-500 transition-all">
-        🖨️ 인쇄 / PDF 저장
-      </button>
-    </div>
-  );
-}
-
 // =============================================
 // 1. 급여 일할 계산기
 // =============================================
@@ -81,7 +56,6 @@ function SalaryCalc({ onBack }: { onBack: () => void }) {
   const [date, setDate] = useState('');
   const [type, setType] = useState<'입사' | '퇴사'>('입사');
   const [displayResult, setDisplayResult] = useState<{ total: number; details: { label: string; value: number }[] } | null>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -105,7 +79,7 @@ function SalaryCalc({ onBack }: { onBack: () => void }) {
   return (
     <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
       <BackButton onClick={onBack} />
-      <div ref={cardRef} className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         <CalcHeader title="급여 일할 계산기" />
         <div className="p-8">
           <div className="flex mb-6 p-1.5 bg-slate-100 rounded-2xl">
@@ -144,7 +118,6 @@ function SalaryCalc({ onBack }: { onBack: () => void }) {
           )}
         </div>
       </div>
-      {displayResult && <DownloadButtons targetRef={cardRef} filename="급여_일할계산_결과" />}
     </div>
   );
 }
@@ -159,8 +132,6 @@ function FreelancerCalc({ onBack }: { onBack: () => void }) {
   const [bulkMode, setBulkMode] = useState<'before' | 'after'>('before');
   const [bulkEntries, setBulkEntries] = useState([{ name: '', amount: '' }]);
   const [bulkResults, setBulkResults] = useState<{ name: string; before: number; incomeTax: number; localTax: number; totalTax: number; after: number }[]>([]);
-  const cardRef = useRef<HTMLDivElement>(null);
-
   const calculateTaxes = (beforeAmt: number) => {
     const incomeTax = Math.floor((beforeAmt * 0.03) / 10) * 10;
     const localTax = Math.floor((incomeTax * 0.1) / 10) * 10;
@@ -209,7 +180,7 @@ function FreelancerCalc({ onBack }: { onBack: () => void }) {
   return (
     <div className={`w-full ${viewMode === 'bulk' ? 'max-w-4xl' : 'max-w-md'} transition-all animate-in fade-in slide-in-from-bottom-4 duration-500`}>
       <BackButton onClick={onBack} />
-      <div ref={cardRef} className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         <CalcHeader title="프리랜서(3.3%) 계산기" />
         <div className="flex p-2 bg-slate-50 border-b border-slate-100">
           {(['single', 'bulk'] as const).map(v => (
@@ -313,7 +284,6 @@ function FreelancerCalc({ onBack }: { onBack: () => void }) {
           )}
         </div>
       </div>
-      {(inputValue || bulkResults.length > 0) && <DownloadButtons targetRef={cardRef} filename="프리랜서_3.3_계산_결과" />}
     </div>
   );
 }
@@ -328,7 +298,6 @@ function RegularSalaryCalc({ onBack }: { onBack: () => void }) {
   const [familyCount, setFamilyCount] = useState(1);
   const [isSpecialRelation, setIsSpecialRelation] = useState(false);
   const [calculatedResult, setCalculatedResult] = useState<{ total: number; np: number; hi: number; lt: number; ei: number; it: number; local: number; totalDeduction: number; after: number } | null>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
 
   const getIncomeTax = (taxable: number, family: number) => {
     if (taxable < 1060000) return 0;
@@ -387,7 +356,7 @@ function RegularSalaryCalc({ onBack }: { onBack: () => void }) {
   return (
     <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
       <BackButton onClick={onBack} />
-      <div ref={cardRef} className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         <CalcHeader title="2026년 연봉 계산기" />
         <div className="p-8 space-y-6">
           <div className="flex gap-3">
@@ -429,7 +398,6 @@ function RegularSalaryCalc({ onBack }: { onBack: () => void }) {
           )}
         </div>
       </div>
-      {calculatedResult && <DownloadButtons targetRef={cardRef} filename="연봉_계산_결과" />}
     </div>
   );
 }
@@ -459,7 +427,6 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
   const [isSmallBiz, setIsSmallBiz] = useState(false);
   const [entries, setEntries] = useState([{ type: 'extended' as string, hours: '' }]);
   const [overtimeResult, setOvertimeResult] = useState<{ details: { label: string; hours: number; rate: number; amount: number }[]; total: number } | null>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
 
   // 통상임금 결과가 나오면 다른 탭의 시간급에 자동 반영
   const applyOrdinaryToOthers = (hw: number) => {
@@ -525,7 +492,7 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
   return (
     <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
       <BackButton onClick={onBack} />
-      <div ref={cardRef} className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         <CalcHeader title="통상임금 산출 및 수당 계산기" />
         {/* 서브탭 */}
         <div className="flex p-2 bg-slate-50 border-b border-slate-100">
@@ -685,7 +652,6 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
           )}
         </div>
       </div>
-      {(ordinaryResult ?? annualResult ?? overtimeResult) && <DownloadButtons targetRef={cardRef} filename="수당_계산_결과" />}
     </div>
   );
 }
