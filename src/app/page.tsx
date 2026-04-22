@@ -754,12 +754,12 @@ export default function MainPage() {
 
           {activeCategory === 'home' ? (
             // 상위 탭 선택 화면
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               {menuGroups.map(group => (
                 <button key={group.category} onClick={() => setActiveCategory(group.category)}
-                  className="group bg-white p-8 rounded-3xl shadow-md border border-slate-100 hover:shadow-xl transition-all text-center flex flex-col items-center gap-3"
-                  style={{ borderTop: `4px solid ${group.color}` }}>
-                  <span className="text-3xl font-black" style={{ color: group.color }}>
+                  className="group bg-white px-8 py-5 rounded-3xl shadow-md border border-slate-100 hover:shadow-xl transition-all text-left flex items-center gap-5"
+                  style={{ borderLeft: `4px solid ${group.color}` }}>
+                  <span className="text-3xl font-black shrink-0" style={{ color: group.color }}>
                     {group.category === 'labor' ? '👤' : group.category === 'notice' ? '📄' : '📝'}
                   </span>
                   <div>
