@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import * as XLSX from 'xlsx';
 import fs from 'fs';
 import path from 'path';
@@ -27,14 +27,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'PDF 파일이 필요합니다' }, { status: 400 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return NextResponse.json({ error: 'API 키가 설정되지 않았습니다' }, { status: 500 });
 
-  // 1. Claude로 PDF에서 부가세 데이터 추출
+  // 1. Gemini로 PDF에서 부가세 데이터 추출
   const pdfBuffer = await pdfFile.arrayBuffer();
   const pdfBase64 = Buffer.from(pdfBuffer).toString('base64');
 
-  const client = new Anthropic({ apiKey });
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
   const prompt = `이 부가가치세 신고서 PDF에서 항목별 금액과 세액을 추출해주세요.
 항목은 (1), (2), ... 형식으로 표시됩니다.
@@ -53,19 +54,11 @@ JSON 형식으로만 응답하세요 (설명 없이):
 
   let vatData: VatData;
   try {
-    const result = await client.messages.create({
-      model: 'claude-opus-4-7',
-      max_tokens: 1024,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } },
-          { type: 'text', text: prompt },
-        ],
-      }],
-    });
-    const block = result.content.find(b => b.type === 'text');
-    const text = block && block.type === 'text' ? block.text : '';
+    const result = await model.generateContent([
+      { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
+      prompt,
+    ]);
+    const text = result.response.text();
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('JSON 파싱 실패');
     vatData = JSON.parse(jsonMatch[0]);
