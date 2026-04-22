@@ -55,20 +55,6 @@ body {
   animation: fadeIn 0.4s cubic-bezier(0.19, 1, 0.22, 1) forwards;
 }
 
-/* 인쇄 — body.printing 상태에서 .print-target만 표시 */
-@media print {
-  body.printing * { visibility: hidden; }
-  body.printing .print-target,
-  body.printing .print-target * { visibility: visible; }
-  body.printing .print-target {
-    position: fixed;
-    top: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 360px;
-  }
-}
-
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
