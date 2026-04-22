@@ -573,7 +573,13 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
               </div>
               <div>
                 <label className="text-[11px] font-bold text-slate-400 ml-1 mb-1 block">미사용 연차일수</label>
-                <input type="text" value={unusedDaysInput} onChange={(e) => { setUnusedDaysInput(formatInput(e.target.value)); setAnnualResult(null); }} placeholder="0"
+                <input type="text" inputMode="decimal" value={unusedDaysInput} onChange={(e) => {
+                    const v = e.target.value.replace(/[^0-9.]/g, '');
+                    const parts = v.split('.');
+                    const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('')}` : v;
+                    setUnusedDaysInput(normalized);
+                    setAnnualResult(null);
+                  }} placeholder="0"
                   className="w-full p-3 bg-slate-50 border-none rounded-xl text-sm font-bold text-right outline-none focus:ring-2 focus:ring-blue-400" />
               </div>
               <button onClick={calcAnnual} className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-lg shadow-lg transition-all active:scale-95">계산하기</button>
