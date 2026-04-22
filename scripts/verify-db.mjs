@@ -64,10 +64,23 @@ async function fetchDbRecords(offset, limit) {
   return res.json();
 }
 
-// 이미 승인/거부된 b_no 목록 조회 (재등록 방지)
+// 이미 승인/거부된 b_no 목록 조회 (재등록 방지) — 1000건 초과 대비 페이징
 async function fetchProcessedNos() {
-  const rows = await sbGet("/business_reviews?select=b_no&status=in.(approved,rejected)");
-  return new Set(rows.map(r => r.b_no));
+  const PAGE = 1000;
+  const all = [];
+  let offset = 0;
+  while (true) {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/business_reviews?select=b_no&status=in.(approved,rejected)`,
+      { headers: { ...SB_HEADERS, 'Range-Unit': 'items', Range: `${offset}-${offset + PAGE - 1}` } }
+    );
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) break;
+    all.push(...rows.map(r => r.b_no));
+    if (rows.length < PAGE) break;
+    offset += PAGE;
+  }
+  return new Set(all);
 }
 
 // ── 공공API ────────────────────────────────────────────────────
