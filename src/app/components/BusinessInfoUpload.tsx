@@ -11,7 +11,7 @@ interface BusinessInfoEntry {
   b_type?: string;
 }
 
-type FileType = "card_nts" | "cash_nts" | "biz_reg" | "unknown";
+type FileType = "card_nts" | "card_nts_detail" | "cash_nts" | "biz_reg" | "unknown";
 
 // ============================================================
 // 파일명에서 날짜 숫자 추출 (YYYYMMDD 기준, 8자리 최대값)
@@ -32,6 +32,8 @@ function detectFileType(rawRows: string[][]): FileType {
     const cells = row.map((c) => String(c));
     if (cells.some((c) => c === "가맹점사업자번호" || c.includes("가맹점사업자번호"))) return "card_nts";
     if (cells.some((c) => c === "가맹점 사업자번호" || c.includes("가맹점 사업자번호"))) return "cash_nts";
+    // 홈택스 사업용신용카드 거래내역 (거래처사업자등록번호 + 가맹점상호)
+    if (cells.some((c) => c.includes("거래처사업자등록번호"))) return "card_nts_detail";
     if (
       cells.some((c) => c.includes("거래처명")) &&
       cells.some((c) => c.includes("사업자등록번호"))
@@ -127,6 +129,41 @@ function parseCashNtsRows(rawRows: string[][]): BusinessInfoEntry[] {
 }
 
 // ============================================================
+// 홈택스 사업용신용카드 거래내역 파서 (card_nts_detail)
+// 컬럼: 거래처사업자등록번호, 가맹점상호
+// ============================================================
+function parseCardNtsDetailRows(rawRows: string[][]): BusinessInfoEntry[] {
+  let headerRowIdx = -1;
+  for (let i = 0; i < Math.min(rawRows.length, 5); i++) {
+    if (rawRows[i].some((c) => String(c).includes("거래처사업자등록번호"))) {
+      headerRowIdx = i;
+      break;
+    }
+  }
+  if (headerRowIdx === -1) return [];
+
+  const headers = rawRows[headerRowIdx].map((h) => String(h).trim());
+  const dataRows = rawRows.slice(headerRowIdx + 1);
+
+  const idx = (name: string) => headers.indexOf(name);
+  const colBno = idx("거래처사업자등록번호");
+  const colNm = idx("가맹점상호");
+
+  if (colBno === -1) return [];
+
+  const map: Record<string, BusinessInfoEntry> = {};
+  for (const row of dataRows) {
+    const bnoRaw = String(row[colBno] ?? "").replace(/[^0-9]/g, "");
+    if (bnoRaw.length !== 10) continue;
+    map[bnoRaw] = {
+      b_no: bnoRaw,
+      b_nm: colNm >= 0 ? String(row[colNm] ?? "").trim() || undefined : undefined,
+    };
+  }
+  return Object.values(map);
+}
+
+// ============================================================
 // 거래처등록 파서 (biz_reg)
 // b_no: 행 내 10자리 숫자 셀 탐색
 // b_nm: "거래처명" 컬럼, p_nm: "대표자" 컬럼
@@ -192,6 +229,7 @@ function parseFile(
 
         let entries: BusinessInfoEntry[] = [];
         if (type === "card_nts") entries = parseCardNtsRows(rawRows);
+        else if (type === "card_nts_detail") entries = parseCardNtsDetailRows(rawRows);
         else if (type === "cash_nts") entries = parseCashNtsRows(rawRows);
         else if (type === "biz_reg") entries = parseBizRegRows(rawRows);
 
@@ -259,11 +297,11 @@ export default function BusinessInfoUpload({ onBack }: { onBack: () => void }) {
         .sort((a, b) => a.dateNum - b.dateNum);
       // card_nts + cash_nts 합산 후 날짜순 정렬 (서로 보완적으로 병합)
       const ntsFiles = parsed
-        .filter((p) => p.type === "card_nts" || p.type === "cash_nts")
+        .filter((p) => p.type === "card_nts" || p.type === "card_nts_detail" || p.type === "cash_nts")
         .sort((a, b) => a.dateNum - b.dateNum);
 
       if (bizRegFiles.length === 0 && ntsFiles.length === 0) {
-        setError("지원 형식을 찾지 못했습니다. (거래처등록 / 사업용신용카드 / 현금영수증 세액공제내역 파일이 필요합니다.)");
+        setError("지원 형식을 찾지 못했습니다. (거래처등록 / 사업용신용카드 세액공제내역·거래내역 / 현금영수증 세액공제내역 파일이 필요합니다.)");
         return;
       }
 
@@ -348,7 +386,7 @@ export default function BusinessInfoUpload({ onBack }: { onBack: () => void }) {
             <p className="text-xs font-black text-violet-700">📋 지원 파일 형식</p>
             <ul className="text-[11px] text-violet-600 font-bold space-y-1 ml-2">
               <li>· 거래처등록 .xlsx — 기초 데이터 (거래처명·대표자)</li>
-              <li>· 국세청 사업용신용카드 세액공제내역 .xls — 덮어쓰기 (업태·업종 추가)</li>
+              <li>· 국세청 사업용신용카드 세액공제내역·거래내역 .xls — 덮어쓰기 (업태·업종 추가)</li>
               <li>· 국세청 현금영수증 세액공제내역 .xls — 덮어쓰기 (유형·업종 추가)</li>
               <li>· 동일 사업자번호: 파일명 날짜 기준 최신 데이터 반영</li>
               <li>· 여러 파일 동시 업로드 가능</li>
