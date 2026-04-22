@@ -15,16 +15,21 @@ export async function GET(request: NextRequest) {
   }
 
   const status = request.nextUrl.searchParams.get('status') ?? 'pending';
+  const limit = parseInt(request.nextUrl.searchParams.get('limit') ?? '50', 10);
+  const offset = parseInt(request.nextUrl.searchParams.get('offset') ?? '0', 10);
   const supabase = getSupabase();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('business_reviews')
-    .select('*')
+    .select('*', { count: 'exact' })
     .eq('status', status)
     .order('created_at', { ascending: false });
 
+  if (limit > 0) query = query.range(offset, offset + limit - 1);
+
+  const { data, error, count } = await query;
   if (error) return Response.json({ error: error.message }, { status: 500 });
-  return Response.json({ data: data ?? [] });
+  return Response.json({ data: data ?? [], total: count ?? 0 });
 }
 
 // POST /api/admin/reviews

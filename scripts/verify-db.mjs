@@ -162,9 +162,9 @@ async function main() {
   // 이미 처리된 b_no 로드 (재등록 방지)
   const processedNos = await fetchProcessedNos();
 
-  let totalCorrupted = 0;
+  let totalSuspicious = 0;
+  let totalUnverifiable = 0;
   let processed = 0;
-  let noApiData = 0;
   let unchanged = 0;
   let offset = startOffset;
   let totalScanned = progressRows?.total_scanned ?? 0;
@@ -181,8 +181,22 @@ async function main() {
       await Promise.all(batch.map(async record => {
         if (processedNos.has(record.b_no)) { unchanged++; return; }
         const pub = await fetchPublicInfo(record.b_no);
-        if (!pub?.b_nm) { noApiData++; return; }
+        if (!pub?.b_nm) {
+          totalUnverifiable++;
+          batchCorrupted.push({
+            b_no: record.b_no,
+            current_nm: record.b_nm,
+            suggested_nm: record.b_nm || '',
+            suggested_sector: null,
+            suggested_type: null,
+            api_source: 'unverifiable',
+            status: 'pending',
+            updated_at: new Date().toISOString(),
+          });
+          return;
+        }
         if (normalizeName(pub.b_nm) === normalizeName(record.b_nm || '')) { unchanged++; return; }
+        totalSuspicious++;
         batchCorrupted.push({
           b_no: record.b_no,
           current_nm: record.b_nm,
@@ -201,10 +215,9 @@ async function main() {
     offset += BATCH_SIZE;
     totalScanned += records.length;
 
-    // 중간 저장 — 이 배치의 오염 의심을 즉시 Supabase에 반영
+    // 중간 저장 — 이 배치의 오염 의심·검증불가를 즉시 Supabase에 반영
     if (batchCorrupted.length > 0) {
       await sbUpsert('business_reviews', batchCorrupted);
-      totalCorrupted += batchCorrupted.length;
     }
 
     // 진행 상태 즉시 갱신 — 중도 종료 시 다음 회차가 이어받도록
@@ -215,11 +228,11 @@ async function main() {
       total_scanned: totalScanned,
     });
 
-    process.stdout.write(`\r처리 중: ${startOffset + processed}/${total}건 (오염 의심: ${totalCorrupted}건)`);
+    process.stdout.write(`\r처리 중: ${startOffset + processed}/${total}건 (오염의심: ${totalSuspicious}건, 검증불가: ${totalUnverifiable}건)`);
   }
 
   console.log(`\n\n${'─'.repeat(50)}`);
-  console.log(`처리: ${processed}건 | 이상없음: ${unchanged}건 | 검증불가: ${noApiData}건 | 오염의심: ${totalCorrupted}건`);
+  console.log(`처리: ${processed}건 | 이상없음: ${unchanged}건 | 오염의심: ${totalSuspicious}건 | 검증불가(등록): ${totalUnverifiable}건`);
   const nextOffset = offset >= total ? 0 : offset;
   console.log(nextOffset === 0 ? '전체 스캔 완료 → 다음 회차부터 처음부터 재시작' : `다음 회차 시작 위치: ${nextOffset}번`);
 }

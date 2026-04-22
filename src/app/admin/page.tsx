@@ -50,6 +50,8 @@ function ReviewItem({ review, password, onDone }: {
   const [type, setType] = useState(review.suggested_type ?? '');
   const [loading, setLoading] = useState(false);
 
+  const isUnverifiable = review.api_source === 'unverifiable';
+
   async function act(action: 'approve' | 'reject') {
     setLoading(true);
     await fetch('/api/admin/reviews', {
@@ -70,17 +72,26 @@ function ReviewItem({ review, password, onDone }: {
       <div className="flex items-start justify-between gap-2">
         <div>
           <span className="text-[11px] font-bold text-slate-400">{formatBizNo(review.b_no)}</span>
-          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-bold">{review.api_source}</span>
+          <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-bold ${isUnverifiable ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>
+            {review.api_source}
+          </span>
         </div>
         <span className="text-[10px] text-slate-300">{new Date(review.created_at).toLocaleDateString('ko-KR')}</span>
       </div>
 
-      {/* 이름 비교 */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm text-red-400 font-bold line-through">{review.current_nm || '(없음)'}</span>
-        <span className="text-slate-300 text-xs">→</span>
-        <span className="text-sm text-green-600 font-black">{review.suggested_nm}</span>
-      </div>
+      {/* 이름 비교 / 검증불가 안내 */}
+      {isUnverifiable ? (
+        <div className="space-y-1">
+          <p className="text-xs text-amber-500 font-bold">공공API 조회 불가 — 직접 확인 필요</p>
+          <p className="text-sm text-slate-600 font-bold">{review.current_nm || '(상호 없음)'}</p>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-red-400 font-bold line-through">{review.current_nm || '(없음)'}</span>
+          <span className="text-slate-300 text-xs">→</span>
+          <span className="text-sm text-green-600 font-black">{review.suggested_nm}</span>
+        </div>
+      )}
 
       {/* 수정 폼 */}
       {editing ? (
@@ -121,7 +132,7 @@ function ReviewItem({ review, password, onDone }: {
           </button>
           <button onClick={() => act('approve')} disabled={loading}
             className="flex-1 bg-green-50 hover:bg-green-100 disabled:opacity-40 text-green-700 font-black rounded-lg py-2 text-xs transition-colors">
-            {loading ? '...' : '✅ 그대로 적용'}
+            {loading ? '...' : isUnverifiable ? '✅ 이상없음' : '✅ 그대로 적용'}
           </button>
           <button onClick={() => act('reject')} disabled={loading}
             className="px-4 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-500 font-bold rounded-lg py-2 text-xs transition-colors">
@@ -144,6 +155,9 @@ export default function AdminPage() {
   // 오염 의심 목록
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [totalReviews, setTotalReviews] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
+  const [pageOffset, setPageOffset] = useState(0);
 
   // 수동 검증 실행
   const [runState, setRunState] = useState<RunState>('idle');
@@ -165,20 +179,44 @@ export default function AdminPage() {
       sessionStorage.setItem('admin_pw', password);
       setAuthed(true);
       setReviews(json.data ?? []);
+      setTotalReviews(json.total ?? 0);
     } catch { setAuthError('서버 연결에 실패했습니다.'); }
     finally { setAuthLoading(false); }
   }
 
-  async function loadReviews() {
+  async function loadReviews(offset = 0, size = pageSize) {
     const pw = sessionStorage.getItem('admin_pw') ?? password;
     setReviewsLoading(true);
     try {
-      const res = await fetch('/api/admin/reviews?' + new URLSearchParams({ password: pw, status: 'pending' }));
-      if (res.ok) setReviews((await res.json()).data ?? []);
+      const params = new URLSearchParams({ password: pw, status: 'pending', limit: String(size), offset: String(offset) });
+      const res = await fetch('/api/admin/reviews?' + params);
+      if (res.ok) {
+        const json = await res.json();
+        setReviews(json.data ?? []);
+        setTotalReviews(json.total ?? 0);
+      }
     } finally { setReviewsLoading(false); }
   }
 
-  useEffect(() => { if (authed && tab === 'reviews') loadReviews(); }, [authed, tab]);
+  function handlePageSizeChange(size: number) {
+    setPageSize(size);
+    setPageOffset(0);
+    loadReviews(0, size);
+  }
+
+  function handlePrev() {
+    const next = Math.max(0, pageOffset - pageSize);
+    setPageOffset(next);
+    loadReviews(next, pageSize);
+  }
+
+  function handleNext() {
+    const next = pageOffset + pageSize;
+    setPageOffset(next);
+    loadReviews(next, pageSize);
+  }
+
+  useEffect(() => { if (authed && tab === 'reviews') loadReviews(0, pageSize); }, [authed, tab]);
 
   async function runVerify() {
     const pw = sessionStorage.getItem('admin_pw') ?? password;
@@ -285,7 +323,7 @@ export default function AdminPage() {
           <button onClick={() => setTab('reviews')}
             className={`flex-1 py-2 rounded-xl text-sm font-black transition-colors ${tab === 'reviews' ? 'bg-blue-500 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
             오염 의심 목록
-            {reviews.length > 0 && <span className="ml-1.5 bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">{reviews.length}</span>}
+            {totalReviews > 0 && <span className="ml-1.5 bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">{totalReviews}</span>}
           </button>
           <button onClick={() => setTab('verify')}
             className={`flex-1 py-2 rounded-xl text-sm font-black transition-colors ${tab === 'verify' ? 'bg-blue-500 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
@@ -296,12 +334,37 @@ export default function AdminPage() {
         {/* ── 오염 의심 목록 탭 ── */}
         {tab === 'reviews' && (
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-slate-500">
-                {reviewsLoading ? '불러오는 중...' : `미처리 ${reviews.length}건`}
-              </p>
-              <button onClick={loadReviews} disabled={reviewsLoading}
-                className="text-xs text-blue-500 font-bold disabled:opacity-40">새로고침</button>
+            {/* 컨트롤 바 */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-500">
+                  {reviewsLoading ? '불러오는 중...' : `미처리 ${totalReviews}건`}
+                </p>
+                <button onClick={() => loadReviews(pageOffset, pageSize)} disabled={reviewsLoading}
+                  className="text-xs text-blue-500 font-bold disabled:opacity-40">새로고침</button>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-slate-400 mr-1">페이지당</span>
+                  {([20, 50, 100, 0] as const).map(size => (
+                    <button key={size} onClick={() => handlePageSizeChange(size)} disabled={reviewsLoading}
+                      className={`text-[11px] px-2 py-0.5 rounded-lg font-bold transition-colors disabled:opacity-40 ${pageSize === size ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+                      {size === 0 ? '전체' : size}
+                    </button>
+                  ))}
+                </div>
+                {pageSize > 0 && totalReviews > pageSize && (
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={handlePrev} disabled={pageOffset === 0 || reviewsLoading}
+                      className="text-[11px] px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:opacity-40 font-bold">이전</button>
+                    <span className="text-[11px] text-slate-400">
+                      {pageOffset + 1}–{Math.min(pageOffset + pageSize, totalReviews)} / {totalReviews}
+                    </span>
+                    <button onClick={handleNext} disabled={pageOffset + pageSize >= totalReviews || reviewsLoading}
+                      className="text-[11px] px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:opacity-40 font-bold">다음</button>
+                  </div>
+                )}
+              </div>
             </div>
 
             {reviews.length === 0 && !reviewsLoading && (
@@ -317,7 +380,7 @@ export default function AdminPage() {
                 <ReviewItem
                   review={r}
                   password={sessionStorage.getItem('admin_pw') ?? password}
-                  onDone={() => setReviews(prev => prev.filter(x => x.id !== r.id))}
+                  onDone={() => { setReviews(prev => prev.filter(x => x.id !== r.id)); setTotalReviews(prev => prev - 1); }}
                 />
               </div>
             ))}
