@@ -95,7 +95,7 @@ function parseBusinessExcel(file: File): Promise<ParseResult> {
           let type = "";
           let rep = "";
 
-          const bnoRaw = r["사업자등록번호"] || r["사업자번호"] || "";
+          const bnoRaw = r["사업자등록번호"] || r["사업자번호"] || r["거래처사업자등록번호"] || "";
           const bnoFromRaw = String(bnoRaw).replace(/[^0-9]/g, "");
 
           if (bnoFromRaw.length === 10) {
@@ -112,7 +112,7 @@ function parseBusinessExcel(file: File): Promise<ParseResult> {
           }
 
           // ── 거래처명 추출 (신용카드: 거래처, 현금영수증: 거래처 or 품명) ──
-          const rawTrade = String(r["거래처"] || r["상호명"] || r["거래처명"] || r["업체명"] || "").trim();
+          const rawTrade = String(r["거래처"] || r["상호명"] || r["거래처명"] || r["업체명"] || r["가맹점상호"] || "").trim();
           const rawItem = String(r["품명"] || "").trim();
           nm = resolveBusinessName(rawTrade, rawItem);
 
@@ -266,7 +266,7 @@ export default function DbUpload({ onBack }: { onBack: () => void }) {
           <div className="bg-violet-50 border border-violet-100 rounded-2xl p-4 space-y-2">
             <p className="text-xs font-black text-violet-700">📋 지원 파일 형식</p>
             <ul className="text-[11px] text-violet-600 font-bold space-y-1 ml-2">
-              <li>· 신용카드(매입) 또는 현금영수증(매입) .xlsx</li>
+              <li>· 신용카드(매입), 현금영수증(매입), 사업용신용카드거래내역 .xlsx/.xls</li>
               <li>· 차변계정 컬럼이 있으면 분류 이력도 함께 저장</li>
               <li>· 여러 파일 동시 업로드 가능</li>
             </ul>
@@ -299,7 +299,7 @@ export default function DbUpload({ onBack }: { onBack: () => void }) {
               <>
                 <div className="text-4xl mb-3">📊</div>
                 <p className="text-sm font-bold text-slate-500">클릭하거나 파일을 여기에 끌어다 놓으세요</p>
-                <p className="text-[10px] text-slate-300 mt-1">.xlsx 파일 지원 · 여러 파일 동시 가능</p>
+                <p className="text-[10px] text-slate-300 mt-1">.xlsx / .xls 파일 지원 · 여러 파일 동시 가능</p>
               </>
             )}
           </div>
