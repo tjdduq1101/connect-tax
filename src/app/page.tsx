@@ -7,7 +7,6 @@ import CashReceiptClassifier from './components/CashReceiptClassifier';
 import DbUpload from './components/DbUpload';
 import BusinessInfoUpload from './components/BusinessInfoUpload';
 import BizStatusBulkChecker from './components/BizStatusBulkChecker';
-import VatNotice from './components/VatNotice';
 
 // --- [공통 함수] ---
 const format = (n: number) => Math.floor(n).toLocaleString();
@@ -666,8 +665,8 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
 // =============================================
 // 메인 페이지
 // =============================================
-type TabKey = 'home' | 'regularSalary' | 'salary' | 'freelancer' | 'wageAllowance' | 'dbUpload' | 'businessInfoUpload' | 'businessLookup' | 'bizStatusBulk' | 'accountRecommend' | 'cashReceiptClassifier' | 'vatNotice';
-type CategoryKey = 'home' | 'labor' | 'tax' | 'notice';
+type TabKey = 'home' | 'regularSalary' | 'salary' | 'freelancer' | 'wageAllowance' | 'dbUpload' | 'businessInfoUpload' | 'businessLookup' | 'bizStatusBulk' | 'accountRecommend' | 'cashReceiptClassifier';
+type CategoryKey = 'home' | 'labor' | 'tax';
 type MenuGroup = { category: CategoryKey; label: string; color: string; items: { key: TabKey; icon: string; title: string; desc: string }[] };
 
 const menuGroups: MenuGroup[] = [
@@ -693,14 +692,6 @@ const menuGroups: MenuGroup[] = [
       { key: 'bizStatusBulk', icon: '\uD83C\uDFE2', title: '사업자상태조회', desc: '폐업·휴업·과세유형 일괄 조회' },
       { key: 'accountRecommend', icon: '\uD83D\uDCCB', title: '카드전표 계정과목 분류', desc: '카드매입 엑셀 자동 분류 및 SmartA10 변환' },
       { key: 'cashReceiptClassifier', icon: '\uD83E\uDDFE', title: '현금영수증 계정과목 분류', desc: '현금영수증 매입 엑셀 업종 조회 및 자동 분류' },
-    ],
-  },
-  {
-    category: 'notice',
-    label: '안내문 작성',
-    color: '#059669',
-    items: [
-      { key: 'vatNotice', icon: '📄', title: '부가세 신고안내문', desc: '신고서 PDF → 안내문 엑셀 자동 입력' },
     ],
   },
 ];
@@ -766,7 +757,7 @@ export default function MainPage() {
                   className="group bg-white px-8 py-5 rounded-3xl shadow-md border border-slate-100 hover:shadow-xl transition-all text-left flex items-center gap-5"
                   style={{ borderLeft: `4px solid ${group.color}` }}>
                   <span className="text-3xl font-black shrink-0" style={{ color: group.color }}>
-                    {group.category === 'labor' ? '👤' : group.category === 'notice' ? '📄' : '📝'}
+                    {group.category === 'labor' ? '👤' : '📝'}
                   </span>
                   <div>
                     <h3 className="font-black text-slate-800 text-xl">{group.label}</h3>
@@ -826,7 +817,7 @@ export default function MainPage() {
               {activeTab === 'accountRecommend' && <AccountRecommend onBack={goHome} />}
               {activeTab === 'cashReceiptClassifier' && <CashReceiptClassifier onBack={goHome} />}
               {activeTab === 'bizStatusBulk' && <BizStatusBulkChecker onBack={goHome} />}
-              {activeTab === 'vatNotice' && <VatNotice onBack={goHome} />}
+
             </div>
             {/* 우측 사이드바 */}
             <div>
