@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState } from 'react';
 import taxData from './data/taxData.json';
 import BusinessLookup from './components/BusinessLookup';
@@ -667,10 +667,19 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
 // 메인 페이지
 // =============================================
 type TabKey = 'home' | 'regularSalary' | 'salary' | 'freelancer' | 'wageAllowance' | 'dbUpload' | 'businessInfoUpload' | 'businessLookup' | 'bizStatusBulk' | 'accountRecommend' | 'cashReceiptClassifier' | 'vatNotice';
-type CategoryKey = 'home' | 'labor' | 'tax' | 'notice';
+type CategoryKey = 'home' | 'db' | 'labor' | 'tax' | 'notice';
 type MenuGroup = { category: CategoryKey; label: string; color: string; items: { key: TabKey; icon: string; title: string; desc: string }[] };
 
 const menuGroups: MenuGroup[] = [
+  {
+    category: 'db',
+    label: 'DB관리',
+    color: '#0EA5E9',
+    items: [
+      { key: 'dbUpload', icon: '🗄️', title: '분류DB 관리', desc: '신용카드·현금영수증 정답지 업로드' },
+      { key: 'businessInfoUpload', icon: '🏢', title: '사업자DB 관리', desc: '국세청 카드내역으로 사업자 정보 구축' },
+    ],
+  },
   {
     category: 'labor',
     label: '노무 관리',
@@ -687,8 +696,6 @@ const menuGroups: MenuGroup[] = [
     label: '세무 관리',
     color: '#7C3AED',
     items: [
-      { key: 'dbUpload', icon: '\uD83D\uDDC4\uFE0F', title: '분류DB 관리', desc: '신용카드·현금영수증 정답지 업로드' },
-      { key: 'businessInfoUpload', icon: '\uD83C\uDFE2', title: '사업자DB 관리', desc: '국세청 카드내역으로 사업자 정보 구축' },
       { key: 'businessLookup', icon: '\uD83D\uDD0D', title: '사업자 조회', desc: '사업자등록번호 조회 및 업종 분류' },
       { key: 'bizStatusBulk', icon: '\uD83C\uDFE2', title: '사업자상태조회', desc: '폐업·휴업·과세유형 일괄 조회' },
       { key: 'accountRecommend', icon: '\uD83D\uDCCB', title: '카드전표 계정과목 분류', desc: '카드매입 엑셀 자동 분류 및 SmartA10 변환' },
@@ -766,7 +773,7 @@ export default function MainPage() {
                   className="group bg-white px-8 py-5 rounded-3xl shadow-md border border-slate-100 hover:shadow-xl transition-all text-left flex items-center gap-5"
                   style={{ borderLeft: `4px solid ${group.color}` }}>
                   <span className="text-3xl font-black shrink-0" style={{ color: group.color }}>
-                    {group.category === 'labor' ? '👤' : group.category === 'notice' ? '📄' : '📝'}
+                    {group.category === 'db' ? '🗄️' : group.category === 'labor' ? '👤' : group.category === 'notice' ? '📄' : '📝'}
                   </span>
                   <div>
                     <h3 className="font-black text-slate-800 text-xl">{group.label}</h3>
