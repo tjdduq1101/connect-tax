@@ -17,6 +17,7 @@ interface Review {
 type Tab = 'reviews' | 'verify';
 type RunState = 'idle' | 'running' | 'done' | 'error';
 type SubmitState = 'idle' | 'loading' | 'done' | 'error';
+type SourceFilter = 'all' | 'verifiable' | 'unverifiable';
 
 interface BatchResult {
   processed: number;
@@ -39,10 +40,12 @@ function formatBizNo(bno: string) {
 }
 
 // ── 수정 폼 컴포넌트 ───────────────────────────────────────────
-function ReviewItem({ review, password, onDone }: {
+function ReviewItem({ review, password, onDone, checked, onCheck }: {
   review: Review;
   password: string;
   onDone: () => void;
+  checked: boolean;
+  onCheck: (id: number, checked: boolean, e: React.MouseEvent) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [nm, setNm] = useState(review.suggested_nm);
@@ -70,11 +73,20 @@ function ReviewItem({ review, password, onDone }: {
     <div className="border border-slate-100 rounded-xl p-4 space-y-3">
       {/* 헤더 */}
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <span className="text-[11px] font-bold text-slate-400">{formatBizNo(review.b_no)}</span>
-          <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-bold ${isUnverifiable ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>
-            {review.api_source}
-          </span>
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={() => {}}
+            onClick={e => onCheck(review.id, !checked, e as React.MouseEvent)}
+            className="w-4 h-4 rounded border-slate-300 accent-blue-500 cursor-pointer flex-none"
+          />
+          <div>
+            <span className="text-[11px] font-bold text-slate-400">{formatBizNo(review.b_no)}</span>
+            <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-bold ${isUnverifiable ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>
+              {review.api_source}
+            </span>
+          </div>
         </div>
         <span className="text-[10px] text-slate-300">{new Date(review.created_at).toLocaleDateString('ko-KR')}</span>
       </div>
@@ -158,6 +170,11 @@ export default function AdminPage() {
   const [totalReviews, setTotalReviews] = useState(0);
   const [pageSize, setPageSize] = useState(50);
   const [pageOffset, setPageOffset] = useState(0);
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  const [sourceCounts, setSourceCounts] = useState({ verifiable: 0, unverifiable: 0 });
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [lastCheckedIdx, setLastCheckedIdx] = useState<number | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   // 수동 검증 실행
   const [runState, setRunState] = useState<RunState>('idle');
@@ -167,6 +184,15 @@ export default function AdminPage() {
   const [fixedItems, setFixedItems] = useState<FixedItem[]>([]);
   const [submitState, setSubmitState] = useState<SubmitState>('idle');
   const [submitMsg, setSubmitMsg] = useState('');
+
+  async function loadSourceCounts(pw: string) {
+    const [verRes, unverRes] = await Promise.all([
+      fetch('/api/admin/reviews?' + new URLSearchParams({ password: pw, status: 'pending', source: 'verifiable', limit: '1', offset: '0' })),
+      fetch('/api/admin/reviews?' + new URLSearchParams({ password: pw, status: 'pending', source: 'unverifiable', limit: '1', offset: '0' })),
+    ]);
+    const [verJson, unverJson] = await Promise.all([verRes.json(), unverRes.json()]);
+    setSourceCounts({ verifiable: verJson.total ?? 0, unverifiable: unverJson.total ?? 0 });
+  }
 
   async function handleAuth(e: React.FormEvent) {
     e.preventDefault();
@@ -180,15 +206,19 @@ export default function AdminPage() {
       setAuthed(true);
       setReviews(json.data ?? []);
       setTotalReviews(json.total ?? 0);
+      loadSourceCounts(password);
     } catch { setAuthError('서버 연결에 실패했습니다.'); }
     finally { setAuthLoading(false); }
   }
 
-  async function loadReviews(offset = 0, size = pageSize) {
+  async function loadReviews(offset = 0, size = pageSize, source: SourceFilter = sourceFilter) {
     const pw = sessionStorage.getItem('admin_pw') ?? password;
     setReviewsLoading(true);
+    setSelectedIds(new Set());
+    setLastCheckedIdx(null);
     try {
       const params = new URLSearchParams({ password: pw, status: 'pending', limit: String(size), offset: String(offset) });
+      if (source !== 'all') params.set('source', source);
       const res = await fetch('/api/admin/reviews?' + params);
       if (res.ok) {
         const json = await res.json();
@@ -204,6 +234,12 @@ export default function AdminPage() {
     loadReviews(0, size);
   }
 
+  function handleSourceFilterChange(source: SourceFilter) {
+    setSourceFilter(source);
+    setPageOffset(0);
+    loadReviews(0, pageSize, source);
+  }
+
   function handlePrev() {
     const next = Math.max(0, pageOffset - pageSize);
     setPageOffset(next);
@@ -214,6 +250,48 @@ export default function AdminPage() {
     const next = pageOffset + pageSize;
     setPageOffset(next);
     loadReviews(next, pageSize);
+  }
+
+  // 체크박스 클릭 (shift 범위 선택 포함)
+  function handleCheck(id: number, idx: number, newChecked: boolean, e: React.MouseEvent) {
+    if (e.shiftKey && lastCheckedIdx !== null) {
+      const start = Math.min(lastCheckedIdx, idx);
+      const end = Math.max(lastCheckedIdx, idx);
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        reviews.slice(start, end + 1).forEach(r => next.add(r.id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        newChecked ? next.add(id) : next.delete(id);
+        return next;
+      });
+    }
+    setLastCheckedIdx(idx);
+  }
+
+  async function handleBulkAction() {
+    const pw = sessionStorage.getItem('admin_pw') ?? password;
+    const selectedArr = Array.from(selectedIds);
+    const selectedReviews = reviews.filter(r => selectedIds.has(r.id));
+    setBulkLoading(true);
+    try {
+      const res = await fetch('/api/admin/reviews', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw, ids: selectedArr, b_nos: selectedReviews.map(r => r.b_no), action: 'approve' }),
+      });
+      if (res.ok) {
+        const count = selectedArr.length;
+        setReviews(prev => prev.filter(r => !selectedIds.has(r.id)));
+        setTotalReviews(prev => prev - count);
+        setSelectedIds(new Set());
+        const newPw = sessionStorage.getItem('admin_pw') ?? password;
+        loadSourceCounts(newPw);
+      }
+    } finally { setBulkLoading(false); }
   }
 
   useEffect(() => { if (authed && tab === 'reviews') loadReviews(0, pageSize); }, [authed, tab]);
@@ -334,13 +412,28 @@ export default function AdminPage() {
         {/* ── 오염 의심 목록 탭 ── */}
         {tab === 'reviews' && (
           <div className="space-y-3">
+            {/* 소스 필터 */}
+            <div className="flex bg-white rounded-2xl p-1 shadow-sm gap-1">
+              {([
+                { key: 'all', label: `전체`, count: sourceCounts.verifiable + sourceCounts.unverifiable },
+                { key: 'verifiable', label: '조회 가능', count: sourceCounts.verifiable },
+                { key: 'unverifiable', label: '조회 불가', count: sourceCounts.unverifiable },
+              ] as const).map(({ key, label, count }) => (
+                <button key={key} onClick={() => handleSourceFilterChange(key)} disabled={reviewsLoading}
+                  className={`flex-1 py-1.5 rounded-xl text-xs font-black transition-colors disabled:opacity-40 ${sourceFilter === key ? 'bg-blue-500 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
+                  {label}
+                  <span className={`ml-1 text-[10px] font-bold ${sourceFilter === key ? 'text-blue-100' : 'text-slate-400'}`}>{count}</span>
+                </button>
+              ))}
+            </div>
+
             {/* 컨트롤 바 */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-slate-500">
                   {reviewsLoading ? '불러오는 중...' : `미처리 ${totalReviews}건`}
                 </p>
-                <button onClick={() => loadReviews(pageOffset, pageSize)} disabled={reviewsLoading}
+                <button onClick={() => { loadReviews(pageOffset, pageSize); loadSourceCounts(sessionStorage.getItem('admin_pw') ?? password); }} disabled={reviewsLoading}
                   className="text-xs text-blue-500 font-bold disabled:opacity-40">새로고침</button>
               </div>
               <div className="flex items-center justify-between">
@@ -367,6 +460,29 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* 전체 선택 / 일괄 처리 바 */}
+            {reviews.length > 0 && (
+              <div className="flex items-center justify-between bg-white rounded-2xl px-4 py-2.5 shadow-sm">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={reviews.length > 0 && reviews.every(r => selectedIds.has(r.id))}
+                    onChange={e => setSelectedIds(e.target.checked ? new Set(reviews.map(r => r.id)) : new Set())}
+                    className="w-4 h-4 rounded border-slate-300 accent-blue-500 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-500">
+                    {selectedIds.size > 0 ? `${selectedIds.size}건 선택됨` : '전체 선택'}
+                  </span>
+                </label>
+                {selectedIds.size > 0 && (
+                  <button onClick={handleBulkAction} disabled={bulkLoading}
+                    className="bg-green-500 hover:bg-green-600 disabled:opacity-40 text-white font-black rounded-xl px-4 py-1.5 text-xs transition-colors">
+                    {bulkLoading ? '처리 중...' : `✅ ${selectedIds.size}건 이상없음 처리`}
+                  </button>
+                )}
+              </div>
+            )}
+
             {reviews.length === 0 && !reviewsLoading && (
               <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
                 <div className="text-3xl mb-2">✅</div>
@@ -375,12 +491,20 @@ export default function AdminPage() {
               </div>
             )}
 
-            {reviews.map(r => (
+            {reviews.map((r, idx) => (
               <div key={r.id} className="bg-white rounded-2xl shadow-sm p-4">
                 <ReviewItem
                   review={r}
                   password={sessionStorage.getItem('admin_pw') ?? password}
-                  onDone={() => { setReviews(prev => prev.filter(x => x.id !== r.id)); setTotalReviews(prev => prev - 1); }}
+                  checked={selectedIds.has(r.id)}
+                  onCheck={(id, newChecked, e) => handleCheck(id, idx, newChecked, e)}
+                  onDone={() => {
+                    setReviews(prev => prev.filter(x => x.id !== r.id));
+                    setTotalReviews(prev => prev - 1);
+                    setSelectedIds(prev => { const next = new Set(prev); next.delete(r.id); return next; });
+                    setLastCheckedIdx(null);
+                    loadSourceCounts(sessionStorage.getItem('admin_pw') ?? password);
+                  }}
                 />
               </div>
             ))}

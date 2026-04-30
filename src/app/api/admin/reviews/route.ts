@@ -19,11 +19,16 @@ export async function GET(request: NextRequest) {
   const offset = parseInt(request.nextUrl.searchParams.get('offset') ?? '0', 10);
   const supabase = getSupabase();
 
+  const source = request.nextUrl.searchParams.get('source'); // 'verifiable' | 'unverifiable'
+
   let query = supabase
     .from('business_reviews')
     .select('*', { count: 'exact' })
     .eq('status', status)
     .order('created_at', { ascending: false });
+
+  if (source === 'unverifiable') query = query.eq('api_source', 'unverifiable');
+  else if (source === 'verifiable') query = query.neq('api_source', 'unverifiable');
 
   if (limit > 0) query = query.range(offset, offset + limit - 1);
 
@@ -80,13 +85,39 @@ export async function POST(request: NextRequest) {
 }
 
 // PATCH /api/admin/reviews
-// body: { password, id, action: 'approve'|'reject', b_nm?, b_sector?, b_type? }
+// 단건: { password, id, b_no, action, b_nm?, b_sector?, b_type? }
+// 일괄: { password, ids: number[], b_nos: string[], action: 'approve'|'reject' }
 export async function PATCH(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   if (!checkPassword(body)) {
     return Response.json({ error: '비밀번호가 올바르지 않습니다.' }, { status: 401 });
   }
 
+  const supabase = getSupabase();
+  const now = new Date().toISOString();
+
+  // 일괄 처리
+  if (Array.isArray(body.ids) && body.ids.length > 0) {
+    const { ids, b_nos, action } = body as { ids: number[]; b_nos: string[]; action: 'approve' | 'reject' };
+
+    if (action === 'approve') {
+      const { error: bizError } = await supabase
+        .from('businesses')
+        .update({ updated_at: now, public_api_synced_at: now })
+        .in('b_no', b_nos);
+      if (bizError) return Response.json({ error: bizError.message }, { status: 500 });
+    }
+
+    const { error: reviewError } = await supabase
+      .from('business_reviews')
+      .update({ status: action === 'approve' ? 'approved' : 'rejected', updated_at: now })
+      .in('id', ids);
+    if (reviewError) return Response.json({ error: reviewError.message }, { status: 500 });
+
+    return Response.json({ success: true, processed: ids.length });
+  }
+
+  // 단건 처리
   const { id, b_no, action, b_nm, b_sector, b_type } = body as {
     id: number;
     b_no: string;
@@ -100,13 +131,10 @@ export async function PATCH(request: NextRequest) {
     return Response.json({ error: 'id, b_no, action 필드가 필요합니다.' }, { status: 400 });
   }
 
-  const supabase = getSupabase();
-
   if (action === 'approve') {
-    // businesses 테이블 업데이트
     const updateFields: Record<string, string> = {
-      updated_at: new Date().toISOString(),
-      public_api_synced_at: new Date().toISOString(),
+      updated_at: now,
+      public_api_synced_at: now,
     };
     if (b_nm) updateFields.b_nm = b_nm;
     if (b_sector) updateFields.b_sector = b_sector;
@@ -116,16 +144,14 @@ export async function PATCH(request: NextRequest) {
       .from('businesses')
       .update(updateFields)
       .eq('b_no', b_no);
-
     if (bizError) return Response.json({ error: bizError.message }, { status: 500 });
   }
 
-  // 리뷰 상태 업데이트
   const { error: reviewError } = await supabase
     .from('business_reviews')
-    .update({ status: action === 'approve' ? 'approved' : 'rejected', updated_at: new Date().toISOString() })
+    .update({ status: action === 'approve' ? 'approved' : 'rejected', updated_at: now })
     .eq('id', id);
-
   if (reviewError) return Response.json({ error: reviewError.message }, { status: 500 });
+
   return Response.json({ success: true });
 }
