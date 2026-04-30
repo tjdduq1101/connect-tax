@@ -1,5 +1,6 @@
 import { fetchPublicBusinessInfo } from './publicBusinessApi';
 import { getSupabase } from './supabase';
+import { fetchNtsStatusMap } from './ntsStatus';
 
 function normalizeName(name: string): string {
   return name.replace(/(주식회사|유한회사|유한책임회사|\(주\)|\(유\)|㈜|\s)/g, '').toLowerCase();
@@ -38,11 +39,16 @@ export async function verifyAndSaveReviews(
   const toCheck = realRecords.filter(r => !processedNos.has(r.b_no));
   if (toCheck.length === 0) return;
 
+  // 폐업 사업자는 검증 대상에서 제외
+  const ntsMap = await fetchNtsStatusMap(toCheck.map(r => r.b_no));
+  const activeRecords = toCheck.filter(r => ntsMap[r.b_no] !== '03');
+  if (activeRecords.length === 0) return;
+
   const corrupted: ReviewRow[] = [];
   const CONCURRENT = 3;
 
-  for (let i = 0; i < toCheck.length; i += CONCURRENT) {
-    const batch = toCheck.slice(i, i + CONCURRENT);
+  for (let i = 0; i < activeRecords.length; i += CONCURRENT) {
+    const batch = activeRecords.slice(i, i + CONCURRENT);
     await Promise.all(batch.map(async record => {
       const pub = await fetchPublicBusinessInfo(record.b_no);
       if (!pub?.b_nm) return;

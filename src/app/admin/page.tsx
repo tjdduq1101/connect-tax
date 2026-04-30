@@ -185,6 +185,8 @@ export default function AdminPage() {
   const [lastCheckedIdx, setLastCheckedIdx] = useState<number | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bizSttMap, setBizSttMap] = useState<Record<string, string>>({});
+  const [rejectClosedState, setRejectClosedState] = useState<'idle' | 'running' | 'done'>('idle');
+  const [rejectClosedProgress, setRejectClosedProgress] = useState({ processed: 0, rejected: 0 });
 
   // 수동 검증 실행
   const [runState, setRunState] = useState<RunState>('idle');
@@ -325,6 +327,35 @@ export default function AdminPage() {
     } finally { setBulkLoading(false); }
   }
 
+  async function handleRejectClosed() {
+    const pw = sessionStorage.getItem('admin_pw') ?? password;
+    setRejectClosedState('running');
+    setRejectClosedProgress({ processed: 0, rejected: 0 });
+    let offset = 0;
+    let totalProcessed = 0, totalRejected = 0;
+    try {
+      while (true) {
+        const res = await fetch('/api/admin/reject-closed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw, offset, limit: 100 }),
+        });
+        if (!res.ok) break;
+        const data = await res.json() as { processed: number; rejected: number; hasMore: boolean; nextOffset: number };
+        totalProcessed += data.processed;
+        totalRejected += data.rejected;
+        setRejectClosedProgress({ processed: totalProcessed, rejected: totalRejected });
+        if (!data.hasMore) break;
+        offset = data.nextOffset;
+      }
+    } finally {
+      setRejectClosedState('done');
+      const newPw = sessionStorage.getItem('admin_pw') ?? password;
+      loadReviews(0, pageSize);
+      loadSourceCounts(newPw);
+    }
+  }
+
   useEffect(() => { if (authed && tab === 'reviews') loadReviews(0, pageSize); }, [authed, tab]);
 
   async function runVerify() {
@@ -443,6 +474,24 @@ export default function AdminPage() {
         {/* ── 오염 의심 목록 탭 ── */}
         {tab === 'reviews' && (
           <div className="space-y-3">
+            {/* 폐업 자동 무시 */}
+            <div className="bg-white rounded-2xl px-4 py-3 shadow-sm flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-black text-slate-700">폐업 자동 무시</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  {rejectClosedState === 'idle' && '국세청 조회 후 폐업 사업자 pending 건을 일괄 무시 처리합니다.'}
+                  {rejectClosedState === 'running' && `처리 중... ${rejectClosedProgress.processed}건 확인 / ${rejectClosedProgress.rejected}건 무시됨`}
+                  {rejectClosedState === 'done' && `완료 — ${rejectClosedProgress.processed}건 확인, ${rejectClosedProgress.rejected}건 무시됨`}
+                </p>
+              </div>
+              <button
+                onClick={handleRejectClosed}
+                disabled={rejectClosedState === 'running'}
+                className="flex-none bg-red-50 hover:bg-red-100 disabled:opacity-40 text-red-600 font-black rounded-xl px-4 py-2 text-xs transition-colors whitespace-nowrap">
+                {rejectClosedState === 'running' ? '처리 중...' : '🗑 실행'}
+              </button>
+            </div>
+
             {/* 소스 필터 */}
             <div className="flex bg-white rounded-2xl p-1 shadow-sm gap-1">
               {([
