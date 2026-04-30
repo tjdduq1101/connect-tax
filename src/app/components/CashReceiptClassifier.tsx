@@ -262,31 +262,20 @@ async function searchNaverBizInfo(tradeName: string): Promise<BusinessInfo | nul
 // 거래처 업종 조회: DB+공공API 병렬 비교 → 불일치 시 API 우선
 // ============================================================
 async function lookupBusinessInfo(tradeName: string, code: string): Promise<BusinessInfo> {
-  // DB와 공공API 항상 병렬 조회하여 비교
-  const [dbByBno, publicData] = await Promise.all([
-    searchDbByBno(code),
-    searchPublicDataBizInfo(code),
-  ]);
-
-  if (dbByBno && publicData) {
-    // sector/type 중 하나라도 다르면 API 기준
-    const sectorDiffers = !!(dbByBno.sector && publicData.sector &&
-      dbByBno.sector.trim() !== publicData.sector.trim());
-    const typeDiffers = !!(dbByBno.type && publicData.type &&
-      dbByBno.type.trim() !== publicData.type.trim());
-    return (sectorDiffers || typeDiffers) ? publicData : dbByBno;
-  }
+  // 1순위: 사업자번호로 DB 조회 — hit 시 즉시 반환 (공공API 생략)
+  const dbByBno = await searchDbByBno(code);
   if (dbByBno) return dbByBno;
+
+  // 2순위: 공공데이터 API
+  const publicData = await searchPublicDataBizInfo(code);
   if (publicData) return publicData;
 
-  // bno 조회 모두 실패 시 이름 기반 폴백
-  const dbByName = await searchDbByName(tradeName);
-  if (dbByName) return dbByName;
-
-  const naver = await searchNaverBizInfo(tradeName);
-  if (naver) return naver;
-
-  return { sector: "", type: "", source: "" };
+  // 3순위: 이름 기반 DB 조회 + 네이버 병렬
+  const [dbByName, naver] = await Promise.all([
+    searchDbByName(tradeName),
+    searchNaverBizInfo(tradeName),
+  ]);
+  return dbByName ?? naver ?? { sector: "", type: "", source: "" };
 }
 
 // ============================================================
