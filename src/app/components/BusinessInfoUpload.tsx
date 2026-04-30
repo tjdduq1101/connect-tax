@@ -361,9 +361,9 @@ export default function BusinessInfoUpload({ onBack }: { onBack: () => void }) {
 
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         {/* Header */}
-        <div className="bg-violet-600 p-8 text-center text-white">
+        <div className="bg-sky-500 p-8 text-center text-white">
           <h1 className="text-2xl font-black mb-1">사업자DB 관리</h1>
-          <p className="text-violet-200 text-xs font-bold uppercase tracking-widest opacity-80">
+          <p className="text-sky-100 text-xs font-bold uppercase tracking-widest opacity-80">
             Business Info Database Upload
           </p>
         </div>
@@ -382,9 +382,9 @@ export default function BusinessInfoUpload({ onBack }: { onBack: () => void }) {
           </div>
 
           {/* 안내 */}
-          <div className="bg-violet-50 border border-violet-100 rounded-2xl p-4 space-y-2">
-            <p className="text-xs font-black text-violet-700">📋 지원 파일 형식</p>
-            <ul className="text-[11px] text-violet-600 font-bold space-y-1 ml-2">
+          <div className="bg-sky-50 border border-sky-100 rounded-2xl p-4 space-y-2">
+            <p className="text-xs font-black text-sky-700">📋 지원 파일 형식</p>
+            <ul className="text-[11px] text-sky-600 font-bold space-y-1 ml-2">
               <li>· 거래처등록 .xlsx — 기초 데이터 (거래처명·대표자)</li>
               <li>· 국세청 사업용신용카드 세액공제내역·거래내역 .xls — 덮어쓰기 (업태·업종 추가)</li>
               <li>· 국세청 현금영수증 세액공제내역 .xls — 덮어쓰기 (유형·업종 추가)</li>
@@ -396,7 +396,7 @@ export default function BusinessInfoUpload({ onBack }: { onBack: () => void }) {
           {/* 업로드 영역 */}
           <div
             className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-colors ${
-              dragging ? "border-violet-400 bg-violet-50" : "border-slate-200 hover:border-violet-300"
+              dragging ? "border-sky-400 bg-sky-50" : "border-slate-200 hover:border-sky-300"
             }`}
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
@@ -442,7 +442,7 @@ export default function BusinessInfoUpload({ onBack }: { onBack: () => void }) {
                   </span>
                 )}
                 {status.cardNtsCount > 0 && (
-                  <span className="bg-violet-100 text-violet-700 text-xs font-bold px-3 py-1 rounded-full">
+                  <span className="bg-sky-100 text-sky-700 text-xs font-bold px-3 py-1 rounded-full">
                     💳 카드내역 {status.cardNtsCount}건
                   </span>
                 )}

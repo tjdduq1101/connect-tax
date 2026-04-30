@@ -242,9 +242,9 @@ export default function DbUpload({ onBack }: { onBack: () => void }) {
 
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         {/* Header */}
-        <div className="bg-violet-600 p-8 text-center text-white">
+        <div className="bg-sky-500 p-8 text-center text-white">
           <h1 className="text-2xl font-black mb-1">분류DB 관리</h1>
-          <p className="text-violet-200 text-xs font-bold uppercase tracking-widest opacity-80">
+          <p className="text-sky-100 text-xs font-bold uppercase tracking-widest opacity-80">
             Classification Database Upload
           </p>
         </div>
@@ -263,9 +263,9 @@ export default function DbUpload({ onBack }: { onBack: () => void }) {
           </div>
 
           {/* 안내 */}
-          <div className="bg-violet-50 border border-violet-100 rounded-2xl p-4 space-y-2">
-            <p className="text-xs font-black text-violet-700">📋 지원 파일 형식</p>
-            <ul className="text-[11px] text-violet-600 font-bold space-y-1 ml-2">
+          <div className="bg-sky-50 border border-sky-100 rounded-2xl p-4 space-y-2">
+            <p className="text-xs font-black text-sky-700">📋 지원 파일 형식</p>
+            <ul className="text-[11px] text-sky-600 font-bold space-y-1 ml-2">
               <li>· 신용카드(매입), 현금영수증(매입), 사업용신용카드거래내역 .xlsx/.xls</li>
               <li>· 차변계정 컬럼이 있으면 분류 이력도 함께 저장</li>
               <li>· 여러 파일 동시 업로드 가능</li>
@@ -275,7 +275,7 @@ export default function DbUpload({ onBack }: { onBack: () => void }) {
           {/* 업로드 영역 */}
           <div
             className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-colors ${
-              dragging ? "border-violet-400 bg-violet-50" : "border-slate-200 hover:border-violet-300"
+              dragging ? "border-sky-400 bg-sky-50" : "border-slate-200 hover:border-sky-300"
             }`}
             onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
