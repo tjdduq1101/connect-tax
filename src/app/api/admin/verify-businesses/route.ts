@@ -6,7 +6,7 @@ export const maxDuration = 60;
 
 function checkPassword(body: Record<string, unknown>): boolean {
   const adminPassword = process.env.ADMIN_PASSWORD;
-  if (!adminPassword) return true;
+  if (!adminPassword) return false;
   return body.password === adminPassword;
 }
 
