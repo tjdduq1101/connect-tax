@@ -798,13 +798,13 @@ export default function MainPage() {
               {currentGroup?.items.map(item => (
                 <button key={item.key} onClick={() => setActiveTab(item.key)}
                   className="group bg-white p-5 rounded-2xl shadow-md border border-slate-100 hover:shadow-xl transition-all text-left flex items-center gap-4 w-full"
-                  style={{ ['--hover-color' as string]: currentGroup.color }}>
+                  style={{ borderLeft: `4px solid ${currentGroup.color}` }}>
                   <div className="w-11 h-11 rounded-xl flex items-center justify-center text-xl shrink-0 transition-colors"
-                    style={{ background: `${currentGroup.color}15` }}>
+                    style={{ background: `${currentGroup.color}20` }}>
                     {item.icon}
                   </div>
                   <div>
-                    <h3 className="font-black text-slate-800">{item.title}</h3>
+                    <h3 className="font-black" style={{ color: currentGroup.color }}>{item.title}</h3>
                     <p className="text-slate-400 text-[11px] font-bold mt-0.5">{item.desc}</p>
                   </div>
                 </button>
