@@ -58,7 +58,11 @@ export default function VatNotice({ onBack }: Props) {
   }
 
   return (
-    <div className="bg-white rounded-3xl shadow-md overflow-hidden w-full max-w-md">
+    <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <button onClick={onBack} className="mb-4 text-slate-400 hover:text-blue-600 text-sm font-bold flex items-center gap-1 transition-colors">
+        &#8592; 돌아가기
+      </button>
+      <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
       {/* 헤더 */}
       <div className="bg-emerald-600 p-8 text-center text-white">
         <h1 className="text-2xl font-black mb-1">부가세 신고안내문 자동입력</h1>
@@ -68,10 +72,6 @@ export default function VatNotice({ onBack }: Props) {
       </div>
 
       <div className="p-8 space-y-5">
-        <button onClick={onBack} className="text-slate-400 hover:text-blue-600 text-sm font-bold flex items-center gap-1 transition-colors">
-          ← 돌아가기
-        </button>
-
         {/* 드래그 업로드 영역 */}
         <label
           onDragOver={e => { e.preventDefault(); setDragOver(true); }}
@@ -132,6 +132,7 @@ export default function VatNotice({ onBack }: Props) {
         {status === 'idle' && errorMsg && (
           <p className="text-center text-sm font-bold text-red-500">{errorMsg}</p>
         )}
+      </div>
       </div>
     </div>
   );
