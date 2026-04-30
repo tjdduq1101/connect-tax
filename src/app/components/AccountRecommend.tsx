@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import {
   classifyTransaction,
@@ -224,31 +224,20 @@ async function searchNaverBizInfo(tradeName: string): Promise<BusinessInfo | nul
 // 거래처 업종 조회: DB+공공API 병렬 비교 → 불일치 시 API 우선
 // ============================================================
 async function lookupBusinessInfo(tradeName: string, bno: string): Promise<BusinessInfo> {
-  // DB와 공공API 항상 병렬 조회하여 비교
-  const [dbByBno, publicData] = await Promise.all([
-    searchDbByBno(bno),
-    searchPublicDataBizInfo(bno),
-  ]);
-
-  if (dbByBno && publicData) {
-    // sector/type 중 하나라도 다르면 API 기준
-    const sectorDiffers = !!(dbByBno.sector && publicData.sector &&
-      dbByBno.sector.trim() !== publicData.sector.trim());
-    const typeDiffers = !!(dbByBno.type && publicData.type &&
-      dbByBno.type.trim() !== publicData.type.trim());
-    return (sectorDiffers || typeDiffers) ? publicData : dbByBno;
-  }
+  // 1순위: 사업자번호로 DB 조회 — hit 시 즉시 반환 (공공API 생략)
+  const dbByBno = await searchDbByBno(bno);
   if (dbByBno) return dbByBno;
+
+  // 2순위: 공공데이터 API
+  const publicData = await searchPublicDataBizInfo(bno);
   if (publicData) return publicData;
 
-  // bno 조회 모두 실패 시 이름 기반 폴백
-  const dbByName = await searchDbByName(tradeName);
-  if (dbByName) return dbByName;
-
-  const naver = await searchNaverBizInfo(tradeName);
-  if (naver) return naver;
-
-  return { sector: "", type: "", source: "" };
+  // 3순위: 이름 기반 DB 조회 + 네이버 병렬
+  const [dbByName, naver] = await Promise.all([
+    searchDbByName(tradeName),
+    searchNaverBizInfo(tradeName),
+  ]);
+  return dbByName ?? naver ?? { sector: "", type: "", source: "" };
 }
 
 // ============================================================
@@ -788,16 +777,25 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
     XLSX.writeFile(wb, "SmartA10_신용카드매입.xls");
   };
 
+  // classified 인덱스 맵 (indexOf O(n) → O(1))
+  const classifiedIndexMap = useMemo(() => {
+    const map = new Map<ClassifiedRow, number>();
+    classified.forEach((c, i) => map.set(c, i));
+    return map;
+  }, [classified]);
+
   // 통계
-  const total = classified.length;
-  const highCount = classified.filter((c) => c.result.confidence === "high").length;
-  const mediumCount = classified.filter((c) => c.result.confidence === "medium").length;
-  const lowCount = classified.filter((c) => c.result.confidence === "low" && !c.aiResult).length;
-  const aiCount = classified.filter((c) => c.aiResult).length;
-  const excludeCount = classified.filter((c) => c.result.tag === "전송제외").length;
+  const { total, highCount, mediumCount, lowCount, aiCount, excludeCount } = useMemo(() => ({
+    total: classified.length,
+    highCount: classified.filter((c) => c.result.confidence === "high").length,
+    mediumCount: classified.filter((c) => c.result.confidence === "medium").length,
+    lowCount: classified.filter((c) => c.result.confidence === "low" && !c.aiResult).length,
+    aiCount: classified.filter((c) => c.aiResult).length,
+    excludeCount: classified.filter((c) => c.result.tag === "전송제외").length,
+  }), [classified]);
 
   // 필터된 목록
-  const filteredRows = (() => {
+  const filteredRows = useMemo(() => {
     let rows = classified.filter((c) => {
       const eff = getEffectiveResult(c);
       if (filter === "high") return c.result.confidence === "high" && !c.manualOverride;
@@ -817,7 +815,7 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
       });
     }
     return rows;
-  })();
+  }, [classified, filter, sortConfig]);
 
   const toggleSort = (field: "code" | "name" | "tradeName" | "tag") => {
     setSortConfig((prev) => {
@@ -1249,7 +1247,7 @@ export default function AccountRecommend({ onBack }: { onBack: () => void }) {
                     </thead>
                     <tbody className="font-bold text-slate-700">
                       {filteredRows.map((c, i) => {
-                        const origIdx = classified.indexOf(c);
+                        const origIdx = classifiedIndexMap.get(c) ?? i;
                         const eff = getEffectiveResult(c);
                         const isChecked = checkedIndices.has(origIdx);
                         const isAi = !!c.aiResult;

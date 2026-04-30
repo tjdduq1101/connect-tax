@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import * as XLSX from "xlsx";
 import {
   classifyTransaction,
@@ -591,13 +591,22 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
     XLSX.writeFile(wb, "현금영수증_계정분류결과.xls");
   };
 
-  // 통계
-  const total = classified.length;
-  const changedCount = classified.filter((c) => c.changed).length;
-  const lowCount = classified.filter((c) => c.result.confidence === "low").length;
-  const excludeCount = classified.filter((c) => c.result.tag === "전송제외").length;
+  // classified 인덱스 맵 (indexOf O(n) → O(1))
+  const classifiedIndexMap = useMemo(() => {
+    const map = new Map<ClassifiedCashRow, number>();
+    classified.forEach((c, i) => map.set(c, i));
+    return map;
+  }, [classified]);
 
-  const filteredRows = (() => {
+  // 통계
+  const { total, changedCount, lowCount, excludeCount } = useMemo(() => ({
+    total: classified.length,
+    changedCount: classified.filter((c) => c.changed).length,
+    lowCount: classified.filter((c) => c.result.confidence === "low").length,
+    excludeCount: classified.filter((c) => c.result.tag === "전송제외").length,
+  }), [classified]);
+
+  const filteredRows = useMemo(() => {
     let rows = classified.filter((c) => {
       const eff = getEffectiveResult(c);
       if (filter === "changed") return c.changed || !!c.manualOverride;
@@ -617,7 +626,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
       });
     }
     return rows;
-  })();
+  }, [classified, filter, sortConfig]);
 
   // 정렬 토글
   const toggleSort = (field: "code" | "name" | "tradeName" | "tag") => {
@@ -1030,7 +1039,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                     </thead>
                     <tbody className="font-bold text-slate-700">
                       {filteredRows.map((c, i) => {
-                        const origIdx = classified.indexOf(c);
+                        const origIdx = classifiedIndexMap.get(c) ?? i;
                         const eff = getEffectiveResult(c);
                         const isChecked = checkedIndices.has(origIdx);
                         const isLow = c.result.confidence === "low" && !c.manualOverride;
