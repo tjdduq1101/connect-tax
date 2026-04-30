@@ -39,13 +39,21 @@ function formatBizNo(bno: string) {
   return bno.replace(/(\d{3})(\d{2})(\d{5})/, '$1-$2-$3');
 }
 
+// ── 폐업 배지 ─────────────────────────────────────────────────
+function BizSttBadge({ sttCd }: { sttCd?: string }) {
+  if (sttCd === '03') return <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-red-100 text-red-600">폐업</span>;
+  if (sttCd === '02') return <span className="text-[10px] px-1.5 py-0.5 rounded font-bold bg-orange-100 text-orange-600">휴업</span>;
+  return null;
+}
+
 // ── 수정 폼 컴포넌트 ───────────────────────────────────────────
-function ReviewItem({ review, password, onDone, checked, onCheck }: {
+function ReviewItem({ review, password, onDone, checked, onCheck, sttCd }: {
   review: Review;
   password: string;
   onDone: () => void;
   checked: boolean;
   onCheck: (id: number, checked: boolean, e: React.MouseEvent) => void;
+  sttCd?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [nm, setNm] = useState(review.suggested_nm);
@@ -81,9 +89,10 @@ function ReviewItem({ review, password, onDone, checked, onCheck }: {
             onClick={e => onCheck(review.id, !checked, e as React.MouseEvent)}
             className="w-4 h-4 rounded border-slate-300 accent-blue-500 cursor-pointer flex-none"
           />
-          <div>
+          <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[11px] font-bold text-slate-400">{formatBizNo(review.b_no)}</span>
-            <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-bold ${isUnverifiable ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>
+            <BizSttBadge sttCd={sttCd} />
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isUnverifiable ? 'bg-amber-100 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>
               {review.api_source}
             </span>
           </div>
@@ -175,6 +184,7 @@ export default function AdminPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [lastCheckedIdx, setLastCheckedIdx] = useState<number | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [bizSttMap, setBizSttMap] = useState<Record<string, string>>({});
 
   // 수동 검증 실행
   const [runState, setRunState] = useState<RunState>('idle');
@@ -211,19 +221,40 @@ export default function AdminPage() {
     finally { setAuthLoading(false); }
   }
 
+  async function fetchBizStt(bnos: string[]) {
+    if (bnos.length === 0) return;
+    try {
+      const res = await fetch('/api/nts/bulk-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ b_no: bnos }),
+      });
+      if (!res.ok) return;
+      const json = await res.json();
+      const map: Record<string, string> = {};
+      for (const item of (json.data ?? []) as { b_no: string; b_stt_cd?: string }[]) {
+        if (item.b_stt_cd) map[item.b_no] = item.b_stt_cd;
+      }
+      setBizSttMap(map);
+    } catch { /* 조회 실패 시 배지만 안 뜨면 됨 */ }
+  }
+
   async function loadReviews(offset = 0, size = pageSize, source: SourceFilter = sourceFilter) {
     const pw = sessionStorage.getItem('admin_pw') ?? password;
     setReviewsLoading(true);
     setSelectedIds(new Set());
     setLastCheckedIdx(null);
+    setBizSttMap({});
     try {
       const params = new URLSearchParams({ password: pw, status: 'pending', limit: String(size), offset: String(offset) });
       if (source !== 'all') params.set('source', source);
       const res = await fetch('/api/admin/reviews?' + params);
       if (res.ok) {
         const json = await res.json();
-        setReviews(json.data ?? []);
+        const loaded: Review[] = json.data ?? [];
+        setReviews(loaded);
         setTotalReviews(json.total ?? 0);
+        fetchBizStt(loaded.map(r => r.b_no));
       }
     } finally { setReviewsLoading(false); }
   }
@@ -497,6 +528,7 @@ export default function AdminPage() {
                   review={r}
                   password={sessionStorage.getItem('admin_pw') ?? password}
                   checked={selectedIds.has(r.id)}
+                  sttCd={bizSttMap[r.b_no]}
                   onCheck={(id, newChecked, e) => handleCheck(id, idx, newChecked, e)}
                   onDone={() => {
                     setReviews(prev => prev.filter(x => x.id !== r.id));
