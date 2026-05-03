@@ -51,7 +51,6 @@ function getAdjustFactor(totalIncome: number): number {
 }
 
 export default function IncomeExpenseDistributor({ onBack }: { onBack: () => void }) {
-  const [codeInput, setCodeInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBiz, setSelectedBiz] = useState<BizCode | null>(null);
   const [rateType, setRateType] = useState<"simple" | "standard">("simple");
@@ -101,12 +100,10 @@ export default function IncomeExpenseDistributor({ onBack }: { onBack: () => voi
   const sumRatio = nonRemainderChecked.reduce((acc, it) => acc + (parseFloat(it.ratio) || 0), 0);
   const remainderItem = items.find((it) => it.isRemainder && it.checked);
   const remainderRatio = remainderItem ? Math.max(0, 100 - sumRatio) : 0;
-  const totalRatioDisplay = remainderItem ? sumRatio + remainderRatio : sumRatio;
   const isOver100 = sumRatio > 100;
 
   function handleSelectBiz(biz: BizCode) {
     setSelectedBiz(biz);
-    setCodeInput(biz.code);
     setSearchQuery(`${biz.code} - ${biz.label}`);
     setShowDropdown(false);
     setResult(null);
@@ -114,7 +111,6 @@ export default function IncomeExpenseDistributor({ onBack }: { onBack: () => voi
 
   function handleSearchChange(v: string) {
     setSearchQuery(v);
-    setCodeInput("");
     setSelectedBiz(null);
     setShowDropdown(true);
     setResult(null);
