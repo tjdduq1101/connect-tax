@@ -11,9 +11,9 @@ function checkPassword(body: Record<string, unknown>): boolean {
 }
 
 // POST /api/admin/reject-closed
-// 폐업 사업자의 pending 오염 의심 레코드를 배치 단위로 자동 무시 처리
+// 폐업 사업자를 businesses + business_reviews에서 배치 단위로 삭제
 // body: { password, offset?: number, limit?: number }
-// 반환: { processed, rejected, hasMore, nextOffset }
+// 반환: { processed, deleted, hasMore, nextOffset }
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   if (!checkPassword(body)) {
@@ -33,28 +33,33 @@ export async function POST(request: NextRequest) {
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
   if (!reviews || reviews.length === 0) {
-    return Response.json({ processed: 0, rejected: 0, hasMore: false, nextOffset: offset });
+    return Response.json({ processed: 0, deleted: 0, hasMore: false, nextOffset: offset });
   }
 
   const bnos = (reviews as { id: number; b_no: string }[]).map(r => r.b_no);
   const ntsMap = await fetchNtsStatusMap(bnos);
 
-  const closedIds = (reviews as { id: number; b_no: string }[])
+  const closedBnos = (reviews as { id: number; b_no: string }[])
     .filter(r => ntsMap[r.b_no] === '03')
-    .map(r => r.id);
+    .map(r => r.b_no);
 
-  if (closedIds.length > 0) {
-    const now = new Date().toISOString();
-    const { error: updateError } = await supabase
+  if (closedBnos.length > 0) {
+    const { error: deleteReviewError } = await supabase
       .from('business_reviews')
-      .update({ status: 'rejected', updated_at: now })
-      .in('id', closedIds);
-    if (updateError) return Response.json({ error: updateError.message }, { status: 500 });
+      .delete()
+      .in('b_no', closedBnos);
+    if (deleteReviewError) return Response.json({ error: deleteReviewError.message }, { status: 500 });
+
+    const { error: deleteBizError } = await supabase
+      .from('businesses')
+      .delete()
+      .in('b_no', closedBnos);
+    if (deleteBizError) return Response.json({ error: deleteBizError.message }, { status: 500 });
   }
 
   return Response.json({
     processed: reviews.length,
-    rejected: closedIds.length,
+    deleted: closedBnos.length,
     hasMore: reviews.length === limit,
     nextOffset: offset + reviews.length,
   });
