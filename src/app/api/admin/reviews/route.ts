@@ -101,11 +101,27 @@ export async function PATCH(request: NextRequest) {
     const { ids, b_nos, action } = body as { ids: number[]; b_nos: string[]; action: 'approve' | 'reject' };
 
     if (action === 'approve') {
-      const { error: bizError } = await supabase
-        .from('businesses')
-        .update({ updated_at: now, public_api_synced_at: now })
-        .in('b_no', b_nos);
-      if (bizError) return Response.json({ error: bizError.message }, { status: 500 });
+      const { data: reviewData, error: fetchError } = await supabase
+        .from('business_reviews')
+        .select('b_no, suggested_nm, suggested_sector, suggested_type')
+        .in('id', ids);
+      if (fetchError) return Response.json({ error: fetchError.message }, { status: 500 });
+
+      for (const r of (reviewData ?? []) as { b_no: string; suggested_nm: string | null; suggested_sector: string | null; suggested_type: string | null }[]) {
+        const updateFields: Record<string, string> = {
+          updated_at: now,
+          public_api_synced_at: now,
+        };
+        if (r.suggested_nm) updateFields.b_nm = r.suggested_nm;
+        if (r.suggested_sector) updateFields.b_sector = r.suggested_sector;
+        if (r.suggested_type) updateFields.b_type = r.suggested_type;
+
+        const { error: bizError } = await supabase
+          .from('businesses')
+          .update(updateFields)
+          .eq('b_no', r.b_no);
+        if (bizError) return Response.json({ error: bizError.message }, { status: 500 });
+      }
     }
 
     const { error: reviewError } = await supabase
