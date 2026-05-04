@@ -539,16 +539,16 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
       const uncached = uniqueNames.filter((n) => !cache.has(n));
       setProgress({ current: 0, total: uncached.length });
 
-      // DB/네이버 순차 조회 (5개씩 병렬)
-      for (let i = 0; i < uncached.length; i += 5) {
-        const batch = uncached.slice(i, i + 5);
+      // DB/네이버 순차 조회 (50개씩 병렬)
+      for (let i = 0; i < uncached.length; i += 50) {
+        const batch = uncached.slice(i, i + 50);
         const results = await Promise.all(
           batch.map((name) => lookupBusinessInfo(name, uniqueEntries.get(name) || ""))
         );
         batch.forEach((name, idx) => {
           cache.set(name, results[idx]);
         });
-        setProgress({ current: Math.min(i + 5, uncached.length), total: uncached.length });
+        setProgress({ current: Math.min(i + 50, uncached.length), total: uncached.length });
       }
 
       // 분류 실행
