@@ -1,6 +1,12 @@
 // DB 오염 데이터 자동 검증 스크립트
 // 로컬: node --env-file=.env.local scripts/verify-db.mjs
 // GitHub Actions: 환경변수 직접 주입
+//
+// businesses.verify_status = 'unscanned' 인 레코드를 공공API와 대조
+// - 폐업 → 삭제
+// - 이름 일치 → verified
+// - 이름 불일치 → needs_review + suggested_* 저장
+// - API 조회 불가 → needs_review (api_source='unverifiable')
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -11,9 +17,10 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !API_KEY) {
   process.exit(1);
 }
 
-const RUN_LIMIT = 1000;   // 1회 실행당 처리 건수 (하루 8회 → 일 8000건)
+const RUN_LIMIT = 1000;
 const CONCURRENT = 10;
 const BATCH_SIZE = 100;
+const NTS_BATCH = 100;
 
 const SB_HEADERS = {
   apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -22,12 +29,6 @@ const SB_HEADERS = {
 };
 
 // ── Supabase helpers ───────────────────────────────────────────
-async function sbGet(path) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, { headers: SB_HEADERS });
-  if (!res.ok) throw new Error(`Supabase GET 오류 ${res.status}: ${path}`);
-  return res.json();
-}
-
 async function sbPatch(path, body) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
     method: 'PATCH',
@@ -37,50 +38,50 @@ async function sbPatch(path, body) {
   if (!res.ok) throw new Error(`Supabase PATCH 오류 ${res.status}: ${path}`);
 }
 
-async function sbUpsert(table, rows) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
-    method: 'POST',
-    headers: { ...SB_HEADERS, Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify(rows),
+async function sbDelete(path) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
+    method: 'DELETE',
+    headers: { ...SB_HEADERS, Prefer: 'return=minimal' },
   });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Supabase upsert 오류 ${res.status}: ${text}`);
-  }
+  if (!res.ok) throw new Error(`Supabase DELETE 오류 ${res.status}: ${path}`);
 }
 
-async function countDbRecords() {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/businesses?select=b_no&b_no=not.like.nm_%25`, {
-    headers: { ...SB_HEADERS, Prefer: 'count=exact', 'Range-Unit': 'items', Range: '0-0' },
-  });
-  return parseInt(res.headers.get('content-range')?.split('/')[1] ?? '0', 10);
-}
-
-async function fetchDbRecords(offset, limit) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/businesses?select=b_no,b_nm&b_no=not.like.nm_%25`, {
-    headers: { ...SB_HEADERS, 'Range-Unit': 'items', Range: `${offset}-${offset + limit - 1}` },
-  });
-  if (!res.ok) throw new Error(`Supabase range 오류 ${res.status}`);
+async function fetchUnscanned(limit) {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/businesses?select=b_no,b_nm&verify_status=eq.unscanned&b_no=not.like.nm_%25&limit=${limit}`,
+    { headers: SB_HEADERS }
+  );
+  if (!res.ok) throw new Error(`Supabase 조회 오류 ${res.status}`);
   return res.json();
 }
 
-// 이미 승인/거부된 b_no 목록 조회 (재등록 방지) — 1000건 초과 대비 페이징
-async function fetchProcessedNos() {
-  const PAGE = 1000;
-  const all = [];
-  let offset = 0;
-  while (true) {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/business_reviews?select=b_no&status=in.(approved,rejected)`,
-      { headers: { ...SB_HEADERS, 'Range-Unit': 'items', Range: `${offset}-${offset + PAGE - 1}` } }
-    );
-    const rows = await res.json();
-    if (!Array.isArray(rows) || rows.length === 0) break;
-    all.push(...rows.map(r => r.b_no));
-    if (rows.length < PAGE) break;
-    offset += PAGE;
+async function countUnscanned() {
+  const res = await fetch(
+    `${SUPABASE_URL}/rest/v1/businesses?select=b_no&verify_status=eq.unscanned&b_no=not.like.nm_%25`,
+    { headers: { ...SB_HEADERS, Prefer: 'count=exact', 'Range-Unit': 'items', Range: '0-0' } }
+  );
+  return parseInt(res.headers.get('content-range')?.split('/')[1] ?? '0', 10);
+}
+
+// ── NTS 폐업 조회 ─────────────────────────────────────────────
+async function fetchNtsStatusMap(bnos) {
+  const map = {};
+  for (let i = 0; i < bnos.length; i += NTS_BATCH) {
+    const batch = bnos.slice(i, i + NTS_BATCH).map(b => b.replace(/-/g, ''));
+    try {
+      const res = await fetch(`https://api.odcloud.kr/api/nts-businessman/v1/status?serviceKey=${encodeURIComponent(API_KEY)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ b_no: batch }),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      for (const item of (data?.data ?? [])) {
+        if (item.b_no && item.b_stt_cd) map[item.b_no] = item.b_stt_cd;
+      }
+    } catch { /* 배치 실패 시 무시 */ }
   }
-  return new Set(all);
+  return map;
 }
 
 // ── 공공API ────────────────────────────────────────────────────
@@ -163,91 +164,80 @@ async function fetchPublicInfo(bno) {
 
 // ── 메인 ──────────────────────────────────────────────────────
 async function main() {
-  // 진행 상태 로드
-  const [progressRows] = await sbGet('/verify_progress?id=eq.1');
-  const startOffset = progressRows?.current_offset ?? 0;
-  const total = await countDbRecords();
-  const endOffset = Math.min(startOffset + RUN_LIMIT, total);
-
-  console.log(`\n전체: ${total}건 | 이번 회차 범위: ${startOffset} ~ ${endOffset - 1}건`);
+  const totalUnscanned = await countUnscanned();
+  const toProcess = Math.min(RUN_LIMIT, totalUnscanned);
+  console.log(`\n미검사: ${totalUnscanned}건 | 이번 회차: ${toProcess}건 처리 예정`);
   console.log('─'.repeat(50));
 
-  // 이미 처리된 b_no 로드 (재등록 방지)
-  const processedNos = await fetchProcessedNos();
+  if (toProcess === 0) {
+    console.log('검사할 레코드 없음 — 종료');
+    return;
+  }
 
-  let totalSuspicious = 0;
-  let totalUnverifiable = 0;
-  let processed = 0;
-  let unchanged = 0;
-  let offset = startOffset;
-  let totalScanned = progressRows?.total_scanned ?? 0;
+  const records = await fetchUnscanned(toProcess);
+  if (!records.length) { console.log('레코드 없음 — 종료'); return; }
 
-  while (offset < endOffset) {
-    const batchLimit = Math.min(BATCH_SIZE, endOffset - offset);
-    const records = await fetchDbRecords(offset, batchLimit);
-    if (!records.length) break;
+  // 1단계: NTS 폐업 조회 → 폐업 삭제
+  const allBnos = records.map(r => r.b_no);
+  const ntsMap = await fetchNtsStatusMap(allBnos);
+  const closedBnos = records.filter(r => ntsMap[r.b_no] === '03').map(r => r.b_no);
+  const activeRecords = records.filter(r => ntsMap[r.b_no] !== '03');
 
-    const batchCorrupted = [];
+  if (closedBnos.length > 0) {
+    // Supabase REST API IN 필터: b_no=in.(val1,val2,...)
+    const inFilter = `b_no=in.(${closedBnos.map(b => `"${b}"`).join(',')})`;
+    await sbDelete(`/businesses?${inFilter}`);
+    console.log(`폐업 삭제: ${closedBnos.length}건`);
+  }
 
-    for (let i = 0; i < records.length; i += CONCURRENT) {
-      const batch = records.slice(i, i + CONCURRENT);
-      await Promise.all(batch.map(async record => {
-        if (processedNos.has(record.b_no)) { unchanged++; return; }
-        const pub = await fetchPublicInfo(record.b_no);
-        if (!pub?.b_nm) {
-          totalUnverifiable++;
-          batchCorrupted.push({
-            b_no: record.b_no,
-            current_nm: record.b_nm,
-            suggested_nm: record.b_nm || '',
-            suggested_sector: null,
-            suggested_type: null,
-            api_source: 'unverifiable',
-            status: 'pending',
-            updated_at: new Date().toISOString(),
-          });
-          return;
-        }
-        if (normalizeName(pub.b_nm) === normalizeName(record.b_nm || '')) { unchanged++; return; }
-        totalSuspicious++;
-        batchCorrupted.push({
-          b_no: record.b_no,
-          current_nm: record.b_nm,
-          suggested_nm: pub.b_nm,
-          suggested_sector: pub.b_sector || null,
-          suggested_type: pub.b_type || null,
-          api_source: pub.source,
-          status: 'pending',
-          updated_at: new Date().toISOString(),
+  // 2단계: 공공API 대조
+  let verified = 0, needsReview = 0, unverifiable = 0;
+  const now = new Date().toISOString();
+
+  for (let i = 0; i < activeRecords.length; i += CONCURRENT) {
+    const batch = activeRecords.slice(i, i + CONCURRENT);
+    await Promise.all(batch.map(async record => {
+      const pub = await fetchPublicInfo(record.b_no);
+
+      if (!pub?.b_nm) {
+        unverifiable++;
+        await sbPatch(`/businesses?b_no=eq.${record.b_no}`, {
+          verify_status: 'needs_review',
+          api_source: 'unverifiable',
+          updated_at: now,
         });
-      }));
-      if (i + CONCURRENT < records.length) await new Promise(r => setTimeout(r, 100));
-    }
+        return;
+      }
 
-    processed += records.length;
-    offset += BATCH_SIZE;
-    totalScanned += records.length;
+      if (normalizeName(pub.b_nm) === normalizeName(record.b_nm || '')) {
+        verified++;
+        await sbPatch(`/businesses?b_no=eq.${record.b_no}`, {
+          verify_status: 'verified',
+          updated_at: now,
+        });
+        return;
+      }
 
-    // 중간 저장 — 이 배치의 오염 의심·검증불가를 즉시 Supabase에 반영
-    if (batchCorrupted.length > 0) {
-      await sbUpsert('business_reviews', batchCorrupted);
-    }
+      needsReview++;
+      await sbPatch(`/businesses?b_no=eq.${record.b_no}`, {
+        verify_status: 'needs_review',
+        suggested_nm: pub.b_nm,
+        suggested_sector: pub.b_sector || null,
+        suggested_type: pub.b_type || null,
+        api_source: pub.source,
+        updated_at: now,
+      });
+    }));
 
-    // 진행 상태 즉시 갱신 — 중도 종료 시 다음 회차가 이어받도록
-    const intermediateOffset = offset >= total ? 0 : offset;
-    await sbPatch('/verify_progress?id=eq.1', {
-      current_offset: intermediateOffset,
-      last_run_at: new Date().toISOString(),
-      total_scanned: totalScanned,
-    });
-
-    process.stdout.write(`\r처리 중: ${startOffset + processed}/${total}건 (오염의심: ${totalSuspicious}건, 검증불가: ${totalUnverifiable}건)`);
+    if (i + CONCURRENT < activeRecords.length) await new Promise(r => setTimeout(r, 100));
+    const done = Math.min(i + CONCURRENT, activeRecords.length);
+    process.stdout.write(`\r처리 중: ${done}/${activeRecords.length}건 (이상없음: ${verified} | 확인필요: ${needsReview} | 검증불가: ${unverifiable})`);
   }
 
   console.log(`\n\n${'─'.repeat(50)}`);
-  console.log(`처리: ${processed}건 | 이상없음: ${unchanged}건 | 오염의심: ${totalSuspicious}건 | 검증불가(등록): ${totalUnverifiable}건`);
-  const nextOffset = offset >= total ? 0 : offset;
-  console.log(nextOffset === 0 ? '전체 스캔 완료 → 다음 회차부터 처음부터 재시작' : `다음 회차 시작 위치: ${nextOffset}번`);
+  console.log(`처리: ${activeRecords.length}건 | 폐업삭제: ${closedBnos.length}건 | 이상없음: ${verified}건 | 확인필요: ${needsReview}건 | 검증불가: ${unverifiable}건`);
+  const remaining = totalUnscanned - records.length;
+  console.log(remaining > 0 ? `남은 미검사: ${remaining}건` : '전체 검사 완료');
 }
 
 main().catch(err => { console.error(err); process.exit(1); });

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getSupabase } from '@/lib/supabase';
 import { fetchPublicBusinessInfo } from '@/lib/publicBusinessApi';
+import { fetchNtsStatusMap } from '@/lib/ntsStatus';
 
 export const maxDuration = 60;
 
@@ -10,85 +11,110 @@ function checkPassword(body: Record<string, unknown>): boolean {
   return body.password === adminPassword;
 }
 
+function normalizeName(name: string): string {
+  return name.replace(/(주식회사|유한회사|유한책임회사|\(주\)|\(유\)|㈜|\s)/g, '').toLowerCase();
+}
+
 interface DbRecord {
   b_no: string;
   b_nm: string | null;
 }
 
-interface FixedRecord {
-  b_no: string;
-  old_nm: string | null;
-  new_nm: string;
-}
-
-function normalizeName(name: string): string {
-  return name.replace(/(주식회사|유한회사|유한책임회사|\(주\)|\(유\)|㈜|\s)/g, '').toLowerCase();
-}
-
 // POST /api/admin/verify-businesses
-// body: { offset?: number; limit?: number }
-// DB를 수정하지 않고 오염 의심 목록만 반환 — 실제 반영은 /api/admin/reviews POST로 처리
+// unscanned 상태의 businesses를 공공API와 대조 후 직접 업데이트
+// body: { password, limit?: number }
+// 반환: { processed, verified, needsReview, deleted, unverifiable, hasMore }
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
-
   if (!checkPassword(body)) {
     return Response.json({ error: '비밀번호가 올바르지 않습니다.' }, { status: 401 });
   }
 
-  const offset: number = typeof body.offset === 'number' ? body.offset : 0;
   const limit: number = typeof body.limit === 'number' ? Math.min(body.limit, 100) : 50;
-
   const supabase = getSupabase();
 
   const { data: records, error } = await supabase
     .from('businesses')
     .select('b_no, b_nm')
+    .eq('verify_status', 'unscanned')
     .not('b_no', 'like', 'nm_%')
-    .range(offset, offset + limit - 1);
+    .limit(limit);
 
-  if (error) {
-    return Response.json({ error: error.message }, { status: 500 });
-  }
-
+  if (error) return Response.json({ error: error.message }, { status: 500 });
   if (!records || records.length === 0) {
-    return Response.json({ processed: 0, fixed: [], noApiData: 0, unchanged: 0, hasMore: false, nextOffset: offset });
+    return Response.json({ processed: 0, verified: 0, needsReview: 0, deleted: 0, unverifiable: 0, hasMore: false });
   }
 
-  const fixed: FixedRecord[] = [];
-  let noApiData = 0;
-  let unchanged = 0;
+  const now = new Date().toISOString();
+  const typedRecords = records as DbRecord[];
 
+  // 1단계: NTS 폐업 체크 → 삭제
+  const bnos = typedRecords.map(r => r.b_no);
+  const ntsMap = await fetchNtsStatusMap(bnos);
+  const closedBnos = typedRecords.filter(r => ntsMap[r.b_no] === '03').map(r => r.b_no);
+  const activeRecords = typedRecords.filter(r => ntsMap[r.b_no] !== '03');
+
+  if (closedBnos.length > 0) {
+    await supabase.from('businesses').delete().in('b_no', closedBnos);
+  }
+
+  // 2단계: 공공API 대조
+  let verified = 0, needsReview = 0, unverifiable = 0;
   const CONCURRENT = 3;
-  for (let i = 0; i < records.length; i += CONCURRENT) {
-    const batch = (records as DbRecord[]).slice(i, i + CONCURRENT);
 
+  for (let i = 0; i < activeRecords.length; i += CONCURRENT) {
+    const batch = activeRecords.slice(i, i + CONCURRENT);
     await Promise.all(batch.map(async (record) => {
-      const publicData = await fetchPublicBusinessInfo(record.b_no);
+      const pub = await fetchPublicBusinessInfo(record.b_no);
 
-      if (!publicData?.b_nm) {
-        noApiData++;
+      if (!pub?.b_nm) {
+        unverifiable++;
+        await supabase.from('businesses').update({
+          verify_status: 'needs_review',
+          api_source: 'unverifiable',
+          updated_at: now,
+        }).eq('b_no', record.b_no);
         return;
       }
 
-      if (normalizeName(publicData.b_nm) === normalizeName(record.b_nm || '')) {
-        unchanged++;
+      if (normalizeName(pub.b_nm) === normalizeName(record.b_nm || '')) {
+        verified++;
+        await supabase.from('businesses').update({
+          verify_status: 'verified',
+          updated_at: now,
+        }).eq('b_no', record.b_no);
         return;
       }
 
-      fixed.push({ b_no: record.b_no, old_nm: record.b_nm, new_nm: publicData.b_nm });
+      needsReview++;
+      await supabase.from('businesses').update({
+        verify_status: 'needs_review',
+        suggested_nm: pub.b_nm,
+        suggested_sector: pub.b_sector ?? null,
+        suggested_type: pub.b_type ?? null,
+        api_source: pub.source,
+        updated_at: now,
+      }).eq('b_no', record.b_no);
     }));
 
-    if (i + CONCURRENT < records.length) {
+    if (i + CONCURRENT < activeRecords.length) {
       await new Promise(resolve => setTimeout(resolve, 400));
     }
   }
 
+  // 남은 unscanned 건수 확인
+  const { count: remaining } = await supabase
+    .from('businesses')
+    .select('b_no', { count: 'exact', head: true })
+    .eq('verify_status', 'unscanned')
+    .not('b_no', 'like', 'nm_%');
+
   return Response.json({
-    processed: records.length,
-    fixed,
-    noApiData,
-    unchanged,
-    hasMore: records.length === limit,
-    nextOffset: offset + records.length,
+    processed: typedRecords.length,
+    verified,
+    needsReview,
+    deleted: closedBnos.length,
+    unverifiable,
+    hasMore: (remaining ?? 0) > 0,
   });
 }
