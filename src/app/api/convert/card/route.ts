@@ -53,7 +53,7 @@ ${sampleText}
 해당 컬럼이 없으면 빈 문자열("")로 반환하세요.`;
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const result = await model.generateContent(prompt);
     const text = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
