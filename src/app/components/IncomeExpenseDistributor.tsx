@@ -93,14 +93,17 @@ export default function IncomeExpenseDistributor({ onBack }: { onBack: () => voi
   const totalExpense = selectedRate != null ? totalIncome * selectedRate : 0;
   const adjustedExpense = totalIncome > 0 ? getAdjustedExpense(totalIncome, totalExpense) : 0;
   const adjustFactor = getAdjustFactor(totalIncome);
+  const targetRate = selectedRate != null && totalIncome > 0
+    ? selectedRate * adjustFactor * 100
+    : 0;
 
-  // 체크된 항목들의 비율 합산 (나머지 항목 제외)
+  // 체크된 항목들의 비율 합산 (나머지 항목 제외) — 소득금액 대비 비율
   const checkedItems = items.filter((it) => it.checked);
   const nonRemainderChecked = checkedItems.filter((it) => !it.isRemainder);
   const sumRatio = nonRemainderChecked.reduce((acc, it) => acc + (parseFloat(it.ratio) || 0), 0);
   const remainderItem = items.find((it) => it.isRemainder && it.checked);
-  const remainderRatio = remainderItem ? Math.max(0, 100 - sumRatio) : 0;
-  const isOver100 = sumRatio > 100;
+  const remainderRatio = remainderItem ? Math.max(0, targetRate - sumRatio) : 0;
+  const isOverTarget = sumRatio > targetRate;
 
   function handleSelectBiz(biz: BizCode) {
     setSelectedBiz(biz);
@@ -132,13 +135,14 @@ export default function IncomeExpenseDistributor({ onBack }: { onBack: () => voi
   }
 
   function handleRandomFill() {
+    if (targetRate === 0) return;
+    const scale = targetRate / 100;
     setItems((prev) =>
       prev.map((it) => {
         if (!it.checked || it.isRemainder) return { ...it, ratio: "" };
-        const rand =
-          Math.round(
-            (Math.random() * (it.maxRatio - it.minRatio) + it.minRatio) * 10
-          ) / 10;
+        const scaledMin = it.minRatio * scale;
+        const scaledMax = it.maxRatio * scale;
+        const rand = Math.round((Math.random() * (scaledMax - scaledMin) + scaledMin) * 10) / 10;
         return { ...it, ratio: String(rand) };
       })
     );
@@ -149,13 +153,13 @@ export default function IncomeExpenseDistributor({ onBack }: { onBack: () => voi
     if (!selectedBiz) { alert("업종코드를 선택해주세요."); return; }
     if (totalIncome === 0) { alert("소득금액을 입력해주세요."); return; }
     if (checkedItems.length === 0) { alert("계정과목을 하나 이상 선택해주세요."); return; }
-    if (isOver100) { alert("비율 합계가 100%를 초과했습니다."); return; }
+    if (isOverTarget) { alert("비율 합계가 목표 경비율을 초과했습니다."); return; }
 
     const resultData = checkedItems.map((it) => {
       const ratio = it.isRemainder
         ? remainderRatio / 100
         : (parseFloat(it.ratio) || 0) / 100;
-      return { name: it.name, amount: Math.floor(adjustedExpense * ratio) };
+      return { name: it.name, amount: Math.floor(totalIncome * ratio) };
     });
     setResult(resultData);
   }
@@ -326,7 +330,10 @@ export default function IncomeExpenseDistributor({ onBack }: { onBack: () => voi
                         value={it.ratio}
                         onChange={(e) => handleRatioChange(it.id, e.target.value)}
                         disabled={!it.checked}
-                        placeholder={`${it.minRatio}~${it.maxRatio}`}
+                        placeholder={targetRate > 0
+                          ? `${(it.minRatio * targetRate / 100).toFixed(1)}~${(it.maxRatio * targetRate / 100).toFixed(1)}`
+                          : `${it.minRatio}~${it.maxRatio}`
+                        }
                         className="w-20 p-2 text-right text-sm font-bold bg-slate-50 rounded-lg outline-none focus:ring-2 focus:ring-purple-400 disabled:opacity-40"
                       />
                       <span className="text-sm font-bold text-slate-400">%</span>
@@ -336,25 +343,25 @@ export default function IncomeExpenseDistributor({ onBack }: { onBack: () => voi
               ))}
             </div>
 
-            {/* 비율 합계 */}
+            {/* 비율 합계 — 소득금액 대비 */}
             <div className="mt-3 space-y-1.5">
               {/* 진행 바 */}
               <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all duration-300 ${
-                    isOver100 ? "bg-red-400" : sumRatio >= 90 ? "bg-green-400" : "bg-purple-400"
+                    isOverTarget ? "bg-red-400" : targetRate > 0 && sumRatio >= targetRate * 0.9 ? "bg-green-400" : "bg-purple-400"
                   }`}
-                  style={{ width: `${Math.min(sumRatio, 100)}%` }}
+                  style={{ width: `${targetRate > 0 ? Math.min((sumRatio / targetRate) * 100, 100) : 0}%` }}
                 />
               </div>
               <div
                 className={`flex justify-between items-center px-1 text-xs font-black transition-colors ${
-                  isOver100 ? "text-red-500" : "text-slate-500"
+                  isOverTarget ? "text-red-500" : "text-slate-500"
                 }`}
               >
                 <span>
-                  {isOver100 ? (
-                    <span className="text-red-500">⚠️ 100% 초과 — {(sumRatio - 100).toFixed(1)}% 줄여야 합니다</span>
+                  {isOverTarget ? (
+                    <span className="text-red-500">⚠️ 목표 초과 — {(sumRatio - targetRate).toFixed(1)}% 줄여야 합니다</span>
                   ) : remainderItem?.checked ? (
                     <span>
                       직접 입력 <span className="text-purple-600">{sumRatio.toFixed(1)}%</span>
@@ -368,13 +375,13 @@ export default function IncomeExpenseDistributor({ onBack }: { onBack: () => voi
                     <span>
                       합계 <span className="text-purple-600">{sumRatio.toFixed(1)}%</span>
                       {" "}· 미배분{" "}
-                      <span className={100 - sumRatio < 0 ? "text-red-500" : "text-slate-600"}>
-                        {(100 - sumRatio).toFixed(1)}%
+                      <span className={targetRate - sumRatio < 0 ? "text-red-500" : "text-slate-600"}>
+                        {(targetRate - sumRatio).toFixed(1)}%
                       </span>
                     </span>
                   )}
                 </span>
-                <span className="text-slate-400">/ 100%</span>
+                <span className="text-slate-400">/ {targetRate.toFixed(1)}%</span>
               </div>
             </div>
           </section>
@@ -382,7 +389,7 @@ export default function IncomeExpenseDistributor({ onBack }: { onBack: () => voi
           {/* 계산 버튼 */}
           <button
             onClick={handleCalculate}
-            disabled={!selectedBiz || totalIncome === 0 || checkedItems.length === 0 || isOver100}
+            disabled={!selectedBiz || totalIncome === 0 || checkedItems.length === 0 || isOverTarget}
             className="w-full py-4 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-2xl font-black text-lg shadow-lg transition-all active:scale-95"
           >
             분배 계산하기
