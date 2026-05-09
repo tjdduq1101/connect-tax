@@ -9,6 +9,8 @@ import BusinessInfoUpload from './components/BusinessInfoUpload';
 import BizStatusBulkChecker from './components/BizStatusBulkChecker';
 import VatNotice from './components/VatNotice';
 import IncomeExpenseDistributor from './components/IncomeExpenseDistributor';
+import CardConverter from './components/CardConverter';
+import DocumentConverter from './components/DocumentConverter';
 
 // --- [공통 함수] ---
 const format = (n: number) => Math.floor(n).toLocaleString();
@@ -667,7 +669,7 @@ function WageAndAllowanceCalc({ onBack }: { onBack: () => void }) {
 // =============================================
 // 메인 페이지
 // =============================================
-type TabKey = 'home' | 'regularSalary' | 'salary' | 'freelancer' | 'wageAllowance' | 'dbUpload' | 'businessInfoUpload' | 'businessLookup' | 'bizStatusBulk' | 'accountRecommend' | 'cashReceiptClassifier' | 'vatNotice' | 'incomeExpense';
+type TabKey = 'home' | 'regularSalary' | 'salary' | 'freelancer' | 'wageAllowance' | 'dbUpload' | 'businessInfoUpload' | 'businessLookup' | 'bizStatusBulk' | 'accountRecommend' | 'cashReceiptClassifier' | 'vatNotice' | 'incomeExpense' | 'cardConverter' | 'documentConverter';
 type CategoryKey = 'home' | 'db' | 'labor' | 'tax' | 'notice';
 type MenuGroup = { category: CategoryKey; label: string; color: string; items: { key: TabKey; icon: string; title: string; desc: string }[] };
 
@@ -702,6 +704,8 @@ const menuGroups: MenuGroup[] = [
       { key: 'accountRecommend', icon: '\uD83D\uDCCB', title: '카드전표 계정과목 분류', desc: '카드매입 엑셀 자동 분류 및 SmartA10 변환' },
       { key: 'cashReceiptClassifier', icon: '\uD83E\uDDFE', title: '현금영수증 계정과목 분류', desc: '현금영수증 매입 엑셀 업종 조회 및 자동 분류' },
       { key: 'incomeExpense', icon: '📊', title: '사업소득 비용 자동 분배', desc: '업종코드 기반 필요경비 계정과목별 자동 분배' },
+      { key: 'cardConverter', icon: '💳', title: '카드내역 업로드 변환기', desc: '카드사 엑셀 → 위하고 카드업로드 양식 자동 변환' },
+      { key: 'documentConverter', icon: '🧾', title: '문서 → 일반전표 변환기', desc: '원리금상환·통신비 이미지 → 일반전표 자동 생성' },
     ],
   },
   {
@@ -837,6 +841,8 @@ export default function MainPage() {
               {activeTab === 'bizStatusBulk' && <BizStatusBulkChecker onBack={goHome} />}
               {activeTab === 'vatNotice' && <VatNotice onBack={goHome} />}
               {activeTab === 'incomeExpense' && <IncomeExpenseDistributor onBack={goHome} />}
+              {activeTab === 'cardConverter' && <CardConverter onBack={goHome} />}
+              {activeTab === 'documentConverter' && <DocumentConverter onBack={goHome} />}
 
             </div>
             {/* 우측 사이드바 */}
