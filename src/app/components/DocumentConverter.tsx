@@ -49,7 +49,8 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error ?? 'API 오류');
+        const debugStr = err.debug ? ` [${err.debug.fileName}, ${err.debug.fileType}, ${err.debug.fileSize}bytes]` : '';
+        throw new Error((err.error ?? 'API 오류') + debugStr);
       }
 
       const data = await res.json();

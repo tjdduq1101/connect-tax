@@ -1,5 +1,12 @@
 import { NextRequest } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleAIFileManager } from '@google/generative-ai/server';
+import { writeFile, unlink } from 'fs/promises';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { randomUUID } from 'crypto';
+
+export const maxDuration = 60;
 
 export interface JournalEntry {
   month: string;
@@ -38,11 +45,24 @@ const PROMPT = `당신은 한국 세무회계 전문가입니다. 이 문서를 
 반드시 아래 JSON 형식으로만 반환하세요. 다른 텍스트 없이 JSON만:
 {"entries":[{"month":"","day":"","type":"출금","accountCode":"","accountName":"","partnerCode":"","partnerName":"","memo":"","debit":"","credit":""}]}`;
 
+async function waitForFileActive(fileManager: GoogleAIFileManager, fileName: string): Promise<void> {
+  let file = await fileManager.getFile(fileName);
+  while (file.state === 'PROCESSING') {
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    file = await fileManager.getFile(fileName);
+  }
+  if (file.state === 'FAILED') {
+    throw new Error('Google AI 파일 처리에 실패했습니다.');
+  }
+}
+
 export async function POST(request: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return Response.json({ error: 'GEMINI_API_KEY가 설정되지 않았습니다.' }, { status: 503 });
   }
+
+  let debugInfo = { fileName: 'unknown', fileType: 'unknown', fileSize: 0 };
 
   try {
     const formData = await request.formData();
@@ -54,15 +74,42 @@ export async function POST(request: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const mimeType = file.type || 'application/octet-stream';
-    const base64 = buffer.toString('base64');
+    const isPdf = mimeType === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    debugInfo = { fileName: file.name, fileType: mimeType, fileSize: buffer.length };
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const result = await model.generateContent([
-      { inlineData: { mimeType, data: base64 } },
-      PROMPT,
-    ]);
-    const text = result.response.text();
+    let text: string;
+
+    if (isPdf) {
+      const fileManager = new GoogleAIFileManager(apiKey);
+      const tempPath = join(tmpdir(), `${randomUUID()}.pdf`);
+      await writeFile(tempPath, buffer);
+
+      try {
+        const upload = await fileManager.uploadFile(tempPath, {
+          mimeType: 'application/pdf',
+          displayName: file.name,
+        });
+
+        await waitForFileActive(fileManager, upload.file.name);
+
+        const result = await model.generateContent([
+          { fileData: { fileUri: upload.file.uri, mimeType: 'application/pdf' } },
+          PROMPT,
+        ]);
+        text = result.response.text();
+      } finally {
+        await unlink(tempPath).catch(() => {});
+      }
+    } else {
+      const base64 = buffer.toString('base64');
+      const result = await model.generateContent([
+        { inlineData: { mimeType, data: base64 } },
+        PROMPT,
+      ]);
+      text = result.response.text();
+    }
 
     const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
@@ -74,6 +121,6 @@ export async function POST(request: NextRequest) {
     return Response.json({ entries: parsed.entries ?? [] });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : '알 수 없는 오류';
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json({ error: message, debug: debugInfo }, { status: 500 });
   }
 }

@@ -121,7 +121,11 @@ export default function CardConverter({ onBack }: { onBack: () => void }) {
       method: 'POST',
       body: formData,
     });
-    if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? 'API 오류'); }
+    if (!res.ok) {
+      const e = await res.json();
+      const debugStr = e.debug ? ` [${e.debug.fileName}, ${e.debug.fileType}, ${e.debug.fileSize}bytes]` : '';
+      throw new Error((e.error ?? 'API 오류') + debugStr);
+    }
 
     const data = await res.json();
     const rawRows: (CardRow & { _last4: string })[] = (data.rows ?? []).map(
