@@ -1,5 +1,10 @@
 import { NextRequest } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleAIFileManager } from '@google/generative-ai/server';
+import { writeFile, unlink } from 'fs/promises';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { randomUUID } from 'crypto';
 
 export interface JournalEntry {
   month: string;
@@ -19,7 +24,7 @@ interface DocumentRequest {
   mimeType: string;
 }
 
-const PROMPT = `당신은 한국 세무회계 전문가입니다. 이 문서(이미지 또는 PDF)를 분석하여 일반전표 항목으로 변환해주세요.
+const PROMPT = `당신은 한국 세무회계 전문가입니다. 이 문서를 분석하여 일반전표 항목으로 변환해주세요.
 
 문서 유형을 스스로 판단하고 아래 규칙에 따라 분개하세요:
 
@@ -43,6 +48,35 @@ const PROMPT = `당신은 한국 세무회계 전문가입니다. 이 문서(이
 반드시 아래 JSON 형식으로만 반환하세요. 다른 텍스트 없이 JSON만:
 {"entries":[{"month":"","day":"","type":"출금","accountCode":"","accountName":"","partnerCode":"","partnerName":"","memo":"","debit":"","credit":""}]}`;
 
+async function generateWithInline(apiKey: string, fileBase64: string, mimeType: string): Promise<string> {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const result = await model.generateContent([
+    { inlineData: { mimeType, data: fileBase64 } },
+    PROMPT,
+  ]);
+  return result.response.text();
+}
+
+async function generateWithFilesApi(apiKey: string, fileBase64: string, mimeType: string): Promise<string> {
+  const fileManager = new GoogleAIFileManager(apiKey);
+  const tempPath = join(tmpdir(), `${randomUUID()}.pdf`);
+  await writeFile(tempPath, Buffer.from(fileBase64, 'base64'));
+
+  try {
+    const upload = await fileManager.uploadFile(tempPath, { mimeType, displayName: 'document.pdf' });
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const result = await model.generateContent([
+      { fileData: { fileUri: upload.file.uri, mimeType: upload.file.mimeType } },
+      PROMPT,
+    ]);
+    return result.response.text();
+  } finally {
+    await unlink(tempPath).catch(() => {});
+  }
+}
+
 export async function POST(request: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -57,18 +91,15 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: '파일 데이터가 없습니다.' }, { status: 400 });
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const isPdf = mimeType === 'application/pdf';
+    const text = isPdf
+      ? await generateWithFilesApi(apiKey, fileBase64, mimeType)
+      : await generateWithInline(apiKey, fileBase64, mimeType);
 
-    const result = await model.generateContent([
-      { inlineData: { mimeType, data: fileBase64 } },
-      PROMPT,
-    ]);
-
-    const text = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      return Response.json({ error: 'AI 응답에서 JSON을 찾지 못했습니다.', raw: text }, { status: 500 });
+      return Response.json({ error: 'AI 응답에서 JSON을 찾지 못했습니다.', raw: cleaned }, { status: 500 });
     }
 
     const parsed = JSON.parse(jsonMatch[0]) as { entries: JournalEntry[] };

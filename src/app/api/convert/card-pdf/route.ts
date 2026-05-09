@@ -1,5 +1,10 @@
 import { NextRequest } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleAIFileManager } from '@google/generative-ai/server';
+import { writeFile, unlink } from 'fs/promises';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { randomUUID } from 'crypto';
 
 export interface CardPdfRow {
   거래일자: string;
@@ -30,6 +35,37 @@ const PROMPT = `이 문서는 신용카드 이용내역서입니다.
 - cardLast4: 카드번호 마지막 4자리. 카드번호가 없거나 알 수 없으면 "0000"
 - 취소 거래는 amount 앞에 "-" 붙이기 (예: "-6500")`;
 
+type RawRow = { date: string; merchant: string; amount: string; cardLast4: string };
+
+async function generateWithInline(apiKey: string, fileBase64: string, mimeType: string): Promise<string> {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const result = await model.generateContent([
+    { inlineData: { mimeType, data: fileBase64 } },
+    PROMPT,
+  ]);
+  return result.response.text();
+}
+
+async function generateWithFilesApi(apiKey: string, fileBase64: string, mimeType: string): Promise<string> {
+  const fileManager = new GoogleAIFileManager(apiKey);
+  const tempPath = join(tmpdir(), `${randomUUID()}.pdf`);
+  await writeFile(tempPath, Buffer.from(fileBase64, 'base64'));
+
+  try {
+    const upload = await fileManager.uploadFile(tempPath, { mimeType, displayName: 'card.pdf' });
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const result = await model.generateContent([
+      { fileData: { fileUri: upload.file.uri, mimeType: upload.file.mimeType } },
+      PROMPT,
+    ]);
+    return result.response.text();
+  } finally {
+    await unlink(tempPath).catch(() => {});
+  }
+}
+
 export async function POST(request: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -44,24 +80,18 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: '파일 데이터가 없습니다.' }, { status: 400 });
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const isPdf = mimeType === 'application/pdf';
+    const text = isPdf
+      ? await generateWithFilesApi(apiKey, fileBase64, mimeType)
+      : await generateWithInline(apiKey, fileBase64, mimeType);
 
-    const result = await model.generateContent([
-      { inlineData: { mimeType, data: fileBase64 } },
-      PROMPT,
-    ]);
-
-    const text = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      return Response.json({ error: 'AI 응답에서 JSON을 찾지 못했습니다.', raw: text }, { status: 500 });
+      return Response.json({ error: 'AI 응답에서 JSON을 찾지 못했습니다.', raw: cleaned }, { status: 500 });
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as {
-      rows: { date: string; merchant: string; amount: string; cardLast4: string }[];
-    };
-
+    const parsed = JSON.parse(jsonMatch[0]) as { rows: RawRow[] };
     const rows: CardPdfRow[] = (parsed.rows ?? []).map(r => ({
       거래일자: r.date,
       '거래처(가맹점명)': r.merchant,
