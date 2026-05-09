@@ -17,11 +17,6 @@ export interface CardPdfRow {
   cardLast4: string;
 }
 
-interface CardPdfRequest {
-  fileBase64: string;
-  mimeType: string;
-}
-
 const PROMPT = `이 문서는 신용카드 이용내역서입니다.
 모든 거래 항목을 추출해주세요.
 
@@ -37,35 +32,6 @@ const PROMPT = `이 문서는 신용카드 이용내역서입니다.
 
 type RawRow = { date: string; merchant: string; amount: string; cardLast4: string };
 
-async function generateWithInline(apiKey: string, fileBase64: string, mimeType: string): Promise<string> {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-  const result = await model.generateContent([
-    { inlineData: { mimeType, data: fileBase64 } },
-    PROMPT,
-  ]);
-  return result.response.text();
-}
-
-async function generateWithFilesApi(apiKey: string, fileBase64: string, mimeType: string): Promise<string> {
-  const fileManager = new GoogleAIFileManager(apiKey);
-  const tempPath = join(tmpdir(), `${randomUUID()}.pdf`);
-  await writeFile(tempPath, Buffer.from(fileBase64, 'base64'));
-
-  try {
-    const upload = await fileManager.uploadFile(tempPath, { mimeType, displayName: 'card.pdf' });
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-    const result = await model.generateContent([
-      { fileData: { fileUri: upload.file.uri, mimeType: upload.file.mimeType } },
-      PROMPT,
-    ]);
-    return result.response.text();
-  } finally {
-    await unlink(tempPath).catch(() => {});
-  }
-}
-
 export async function POST(request: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -73,17 +39,50 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body: CardPdfRequest = await request.json();
-    const { fileBase64, mimeType } = body;
+    const formData = await request.formData();
+    const file = formData.get('file') as File | null;
 
-    if (!fileBase64 || !mimeType) {
-      return Response.json({ error: '파일 데이터가 없습니다.' }, { status: 400 });
+    if (!file) {
+      return Response.json({ error: '파일이 없습니다.' }, { status: 400 });
     }
 
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const mimeType = file.type || 'application/octet-stream';
     const isPdf = mimeType === 'application/pdf';
-    const text = isPdf
-      ? await generateWithFilesApi(apiKey, fileBase64, mimeType)
-      : await generateWithInline(apiKey, fileBase64, mimeType);
+
+    let text: string;
+
+    if (isPdf) {
+      const fileManager = new GoogleAIFileManager(apiKey);
+      const ext = file.name.split('.').pop() || 'pdf';
+      const tempPath = join(tmpdir(), `${randomUUID()}.${ext}`);
+      await writeFile(tempPath, buffer);
+
+      try {
+        const upload = await fileManager.uploadFile(tempPath, {
+          mimeType,
+          displayName: file.name,
+        });
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        const result = await model.generateContent([
+          { fileData: { fileUri: upload.file.uri, mimeType: upload.file.mimeType } },
+          PROMPT,
+        ]);
+        text = result.response.text();
+      } finally {
+        await unlink(tempPath).catch(() => {});
+      }
+    } else {
+      const base64 = buffer.toString('base64');
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+      const result = await model.generateContent([
+        { inlineData: { mimeType, data: base64 } },
+        PROMPT,
+      ]);
+      text = result.response.text();
+    }
 
     const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);

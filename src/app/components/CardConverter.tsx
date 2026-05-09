@@ -59,16 +59,6 @@ function normalizeAmount(raw: string | number): string {
   return String(raw).replace(/,/g, '').replace(/[^0-9.-]/g, '');
 }
 
-function getMimeType(file: File): string {
-  if (file.type && file.type !== 'application/octet-stream') return file.type;
-  const ext = file.name.split('.').pop()?.toLowerCase();
-  const map: Record<string, string> = {
-    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-    webp: 'image/webp', gif: 'image/gif', pdf: 'application/pdf',
-  };
-  return map[ext ?? ''] ?? 'image/jpeg';
-}
-
 function groupByLast4(rows: (CardRow & { _last4?: string })[], getKey: (r: CardRow & { _last4?: string }) => string): GroupedCard[] {
   const grouped: Record<string, CardRow[]> = {};
   for (const row of rows) {
@@ -124,17 +114,12 @@ export default function CardConverter({ onBack }: { onBack: () => void }) {
   };
 
   const processDocument = async (file: File) => {
-    const mimeType = getMimeType(file);
-    const buffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    const fileBase64 = btoa(binary);
+    const formData = new FormData();
+    formData.append('file', file);
 
     const res = await fetch('/api/convert/card-pdf', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fileBase64, mimeType }),
+      body: formData,
     });
     if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? 'API 오류'); }
 

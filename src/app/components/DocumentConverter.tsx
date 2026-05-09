@@ -24,16 +24,6 @@ function CalcHeader({ title }: { title: string }) {
   );
 }
 
-function getMimeType(file: File): string {
-  if (file.type && file.type !== 'application/octet-stream') return file.type;
-  const ext = file.name.split('.').pop()?.toLowerCase();
-  const map: Record<string, string> = {
-    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-    webp: 'image/webp', gif: 'image/gif', pdf: 'application/pdf',
-  };
-  return map[ext ?? ''] ?? 'image/jpeg';
-}
-
 export default function DocumentConverter({ onBack }: { onBack: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -49,19 +39,12 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
     setLoading(true);
 
     try {
-      const mimeType = getMimeType(file);
-      const buffer = await file.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      let binary = '';
-      for (let i = 0; i < bytes.byteLength; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      const fileBase64 = btoa(binary);
+      const formData = new FormData();
+      formData.append('file', file);
 
       const res = await fetch('/api/convert/document', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileBase64, mimeType }),
+        body: formData,
       });
 
       if (!res.ok) {
