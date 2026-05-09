@@ -3,22 +3,9 @@ import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import type { JournalEntry } from '@/app/api/convert/document/route';
 
-type DocType = 'loan' | 'telecom' | 'other';
-
-interface DocTypeOption {
-  value: DocType;
-  label: string;
-  icon: string;
-}
-
-const DOC_TYPES: DocTypeOption[] = [
-  { value: 'loan', label: '원리금상환내역서', icon: '🏦' },
-  { value: 'telecom', label: '통신비납부내역서', icon: '📱' },
-  { value: 'other', label: '기타 경비', icon: '📋' },
-];
-
 const JOURNAL_HEADERS = ['월', '일', '구분', '계정과목코드', '계정과목명', '거래처코드', '거래처명', '적요명', '차변', '대변'];
 const ENTRY_FIELDS: (keyof JournalEntry)[] = ['month', 'day', 'type', 'accountCode', 'accountName', 'partnerCode', 'partnerName', 'memo', 'debit', 'credit'];
+const ACCEPTED_EXT = /\.(jpg|jpeg|png|webp|gif|pdf)$/i;
 
 function BackButton({ onClick }: { onClick: () => void }) {
   return (
@@ -37,14 +24,20 @@ function CalcHeader({ title }: { title: string }) {
   );
 }
 
-const ACCEPTED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
-const ACCEPTED_EXT = /\.(jpg|jpeg|png|webp|gif|pdf)$/i;
+function getMimeType(file: File): string {
+  if (file.type && file.type !== 'application/octet-stream') return file.type;
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  const map: Record<string, string> = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+    webp: 'image/webp', gif: 'image/gif', pdf: 'application/pdf',
+  };
+  return map[ext ?? ''] ?? 'image/jpeg';
+}
 
 export default function DocumentConverter({ onBack }: { onBack: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState('');
-  const [docType, setDocType] = useState<DocType>('loan');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [entries, setEntries] = useState<JournalEntry[]>([]);
@@ -56,32 +49,19 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
     setLoading(true);
 
     try {
-      let fileBase64 = '';
-      let mimeType = file.type;
-
-      if (file.name.toLowerCase().endsWith('.pdf')) {
-        // PDF는 이미지로 처리할 수 없으므로 안내
-        setError('PDF 파일은 현재 지원하지 않습니다. 이미지(JPG, PNG)로 변환 후 업로드해주세요.');
-        setLoading(false);
-        return;
-      }
-
-      if (!ACCEPTED_TYPES.includes(mimeType)) {
-        mimeType = 'image/jpeg';
-      }
-
+      const mimeType = getMimeType(file);
       const buffer = await file.arrayBuffer();
       const bytes = new Uint8Array(buffer);
       let binary = '';
       for (let i = 0; i < bytes.byteLength; i++) {
         binary += String.fromCharCode(bytes[i]);
       }
-      fileBase64 = btoa(binary);
+      const fileBase64 = btoa(binary);
 
       const res = await fetch('/api/convert/document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileBase64, mimeType, docType }),
+        body: JSON.stringify({ fileBase64, mimeType }),
       });
 
       if (!res.ok) {
@@ -90,10 +70,11 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
       }
 
       const data = await res.json();
-      setEntries(data.entries ?? []);
+      const fetched: JournalEntry[] = data.entries ?? [];
+      setEntries(fetched);
 
-      if ((data.entries ?? []).length === 0) {
-        setError('문서에서 데이터를 추출하지 못했습니다. 이미지 품질을 확인해주세요.');
+      if (fetched.length === 0) {
+        setError('문서에서 데이터를 추출하지 못했습니다. 파일 품질을 확인해주세요.');
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : '처리 중 오류가 발생했습니다.');
@@ -104,7 +85,7 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
 
   const handleFile = (file: File) => {
     if (!ACCEPTED_EXT.test(file.name)) {
-      setError('이미지 파일(JPG, PNG, WEBP, GIF)만 지원합니다.');
+      setError('JPG, PNG, WEBP, GIF, PDF 파일만 지원합니다.');
       return;
     }
     processFile(file);
@@ -152,27 +133,6 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
         <CalcHeader title="문서 → 일반전표 변환기" />
         <div className="p-8 space-y-6">
 
-          {/* 문서 유형 선택 */}
-          <div>
-            <label className="block text-[11px] font-bold text-slate-400 ml-1 mb-2">문서 유형</label>
-            <div className="grid grid-cols-3 gap-3">
-              {DOC_TYPES.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => { setDocType(opt.value); setEntries([]); setError(''); }}
-                  className={`py-3 px-4 rounded-xl border-2 text-sm font-bold transition-all flex items-center gap-2 justify-center ${
-                    docType === opt.value
-                      ? 'border-blue-500 bg-blue-50 text-blue-600'
-                      : 'border-slate-100 text-slate-500 hover:border-slate-300'
-                  }`}
-                >
-                  <span>{opt.icon}</span>
-                  <span>{opt.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* 파일 업로드 */}
           <div
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -186,13 +146,13 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
             <input
               ref={fileRef}
               type="file"
-              accept=".jpg,.jpeg,.png,.webp,.gif"
+              accept=".jpg,.jpeg,.png,.webp,.gif,.pdf"
               className="hidden"
               onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }}
             />
-            <div className="text-3xl mb-2">🖼️</div>
-            <p className="font-bold text-slate-600">이미지 파일을 드래그하거나 클릭해서 업로드</p>
-            <p className="text-xs text-slate-400 font-bold mt-1">JPG · PNG · WEBP · GIF 지원 (PDF는 이미지로 변환 후 업로드)</p>
+            <div className="text-3xl mb-2">📄</div>
+            <p className="font-bold text-slate-600">파일을 드래그하거나 클릭해서 업로드</p>
+            <p className="text-xs text-slate-400 font-bold mt-1">PDF · JPG · PNG · WEBP 지원 — 문서 유형은 AI가 자동 판단</p>
             {fileName && <p className="mt-3 text-sm font-bold text-blue-600">{fileName}</p>}
           </div>
 

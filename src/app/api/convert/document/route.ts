@@ -17,80 +17,31 @@ export interface JournalEntry {
 interface DocumentRequest {
   fileBase64: string;
   mimeType: string;
-  docType: 'loan' | 'telecom' | 'other';
 }
 
-const PROMPTS: Record<string, string> = {
-  loan: `이 이미지는 원리금상환내역서입니다.
-문서에서 상환 내역을 모두 추출해주세요. 각 행마다 날짜(월, 일), 원금, 이자를 파악해야 합니다.
+const PROMPT = `당신은 한국 세무회계 전문가입니다. 이 문서(이미지 또는 PDF)를 분석하여 일반전표 항목으로 변환해주세요.
 
-결과를 다음 JSON 형식으로만 반환하세요 (설명 없이 JSON만):
-{"entries":[{"month":"1","day":"15","principal":"500000","interest":"30000","memo":"원리금 상환"}]}
+문서 유형을 스스로 판단하고 아래 규칙에 따라 분개하세요:
 
-- month, day: 숫자만 (예: "3", "15")
-- principal, interest: 숫자만, 쉼표 없이 (예: "500000")
-- 항목이 없으면 "0"
-- 복수 상환일이 있으면 각 행을 별도 객체로`,
+【원리금상환내역서인 경우】
+- 원금 행: 구분=출금, 계정과목코드=293, 계정과목명=장기차입금, 차변=원금, 대변=빈칸
+- 이자 행: 구분=출금, 계정과목코드=931, 계정과목명=이자비용, 차변=이자, 대변=빈칸
+- 원금과 이자를 반드시 별도 행으로 분리
 
-  telecom: `이 이미지는 통신비 납부내역서입니다.
-문서에서 납부 내역을 모두 추출해주세요. 각 행마다 날짜(월, 일)와 납부 금액을 파악해야 합니다.
+【통신비납부내역서인 경우】
+- 구분=출금, 계정과목코드=825, 계정과목명=통신비, 차변=납부금액, 대변=빈칸
 
-결과를 다음 JSON 형식으로만 반환하세요 (설명 없이 JSON만):
-{"entries":[{"month":"3","day":"25","amount":"55000","memo":"통신비"}]}
+【기타 경비(영수증, 세금계산서 등)인 경우】
+- 구분=출금, 계정과목코드·계정과목명은 내용에 맞게 추정, 차변=금액, 대변=빈칸
 
-- month, day: 숫자만 (예: "3", "25")
-- amount: 숫자만, 쉼표 없이 (예: "55000")
-- 복수 납부일이 있으면 각 행을 별도 객체로`,
+공통 규칙:
+- 금액은 숫자만 (쉼표·원 표시 제거)
+- month, day는 숫자만 (예: "3", "15")
+- 거래처코드·거래처명은 빈 문자열
+- 적요명은 항목 내용을 간략히 (예: "원금 상환", "이자 지급", "통신비 3월")
 
-  other: `이 이미지는 경비 영수증 또는 납부내역서입니다.
-문서에서 지출 내역을 모두 추출해주세요. 날짜(월, 일)와 금액, 적요(내용)를 파악해야 합니다.
-
-결과를 다음 JSON 형식으로만 반환하세요 (설명 없이 JSON만):
-{"entries":[{"month":"5","day":"10","amount":"120000","memo":"경비 지출"}]}
-
-- month, day: 숫자만
-- amount: 숫자만, 쉼표 없이
-- memo: 문서에 나타난 항목명 또는 내용
-- 복수 항목이 있으면 각 행을 별도 객체로`,
-};
-
-type LoanRaw = { month: string; day: string; principal: string; interest: string; memo: string };
-type SimpleRaw = { month: string; day: string; amount: string; memo: string };
-
-function buildLoanEntries(rawEntries: LoanRaw[]): JournalEntry[] {
-  const result: JournalEntry[] = [];
-  for (const e of rawEntries) {
-    if (parseInt(e.principal) > 0) {
-      result.push({
-        month: e.month, day: e.day, type: '출금',
-        accountCode: '293', accountName: '장기차입금',
-        partnerCode: '', partnerName: '',
-        memo: e.memo || '원금 상환',
-        debit: e.principal, credit: '',
-      });
-    }
-    if (parseInt(e.interest) > 0) {
-      result.push({
-        month: e.month, day: e.day, type: '출금',
-        accountCode: '931', accountName: '이자비용',
-        partnerCode: '', partnerName: '',
-        memo: e.memo || '이자 지급',
-        debit: e.interest, credit: '',
-      });
-    }
-  }
-  return result;
-}
-
-function buildSimpleEntries(rawEntries: SimpleRaw[], accountCode: string, accountName: string): JournalEntry[] {
-  return rawEntries.map(e => ({
-    month: e.month, day: e.day, type: '출금',
-    accountCode, accountName,
-    partnerCode: '', partnerName: '',
-    memo: e.memo || accountName,
-    debit: e.amount, credit: '',
-  }));
-}
+반드시 아래 JSON 형식으로만 반환하세요. 다른 텍스트 없이 JSON만:
+{"entries":[{"month":"","day":"","type":"출금","accountCode":"","accountName":"","partnerCode":"","partnerName":"","memo":"","debit":"","credit":""}]}`;
 
 export async function POST(request: NextRequest) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -100,20 +51,18 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: DocumentRequest = await request.json();
-    const { fileBase64, mimeType, docType } = body;
+    const { fileBase64, mimeType } = body;
 
     if (!fileBase64 || !mimeType) {
       return Response.json({ error: '파일 데이터가 없습니다.' }, { status: 400 });
     }
-
-    const prompt = PROMPTS[docType] ?? PROMPTS.other;
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const result = await model.generateContent([
       { inlineData: { mimeType, data: fileBase64 } },
-      prompt,
+      PROMPT,
     ]);
 
     const text = result.response.text().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
@@ -122,18 +71,8 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: 'AI 응답에서 JSON을 찾지 못했습니다.', raw: text }, { status: 500 });
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as { entries: LoanRaw[] | SimpleRaw[] };
-    let entries: JournalEntry[] = [];
-
-    if (docType === 'loan') {
-      entries = buildLoanEntries(parsed.entries as LoanRaw[]);
-    } else if (docType === 'telecom') {
-      entries = buildSimpleEntries(parsed.entries as SimpleRaw[], '825', '통신비');
-    } else {
-      entries = buildSimpleEntries(parsed.entries as SimpleRaw[], '', '');
-    }
-
-    return Response.json({ entries });
+    const parsed = JSON.parse(jsonMatch[0]) as { entries: JournalEntry[] };
+    return Response.json({ entries: parsed.entries ?? [] });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : '알 수 없는 오류';
     return Response.json({ error: message }, { status: 500 });
