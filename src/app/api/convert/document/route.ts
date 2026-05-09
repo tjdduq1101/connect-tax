@@ -1,10 +1,5 @@
 import { NextRequest } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GoogleAIFileManager } from '@google/generative-ai/server';
-import { writeFile, unlink } from 'fs/promises';
-import { join } from 'path';
-import { tmpdir } from 'os';
-import { randomUUID } from 'crypto';
 
 export interface JournalEntry {
   month: string;
@@ -59,41 +54,15 @@ export async function POST(request: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const mimeType = file.type || 'application/octet-stream';
-    const isPdf = mimeType === 'application/pdf';
+    const base64 = buffer.toString('base64');
 
-    let text: string;
-
-    if (isPdf) {
-      const fileManager = new GoogleAIFileManager(apiKey);
-      const ext = file.name.split('.').pop() || 'pdf';
-      const tempPath = join(tmpdir(), `${randomUUID()}.${ext}`);
-      await writeFile(tempPath, buffer);
-
-      try {
-        const upload = await fileManager.uploadFile(tempPath, {
-          mimeType,
-          displayName: file.name,
-        });
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-        const result = await model.generateContent([
-          { fileData: { fileUri: upload.file.uri, mimeType: upload.file.mimeType } },
-          PROMPT,
-        ]);
-        text = result.response.text();
-      } finally {
-        await unlink(tempPath).catch(() => {});
-      }
-    } else {
-      const base64 = buffer.toString('base64');
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-      const result = await model.generateContent([
-        { inlineData: { mimeType, data: base64 } },
-        PROMPT,
-      ]);
-      text = result.response.text();
-    }
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const result = await model.generateContent([
+      { inlineData: { mimeType, data: base64 } },
+      PROMPT,
+    ]);
+    const text = result.response.text();
 
     const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
