@@ -11,11 +11,17 @@ export const maxDuration = 60;
 export interface CardPdfRow {
   거래일자: string;
   '거래처(가맹점명)': string;
+  사업자번호: string;
   품명: string;
+  유형: string;
+  공급가액: string;
+  세액: string;
+  봉사료: string;
   합계: string;
+  차변계정코드: string;
+  대변계정코드: string;
   공제여부: string;
   거래구분: string;
-  대변계정코드: string;
   cardLast4: string;
 }
 
@@ -26,7 +32,8 @@ const PROMPT = `이 문서는 신용카드 이용내역서입니다.
 {"rows":[{"date":"20250315","merchant":"스타벅스","amount":"6500","cardLast4":"1234"}]}
 
 규칙:
-- date: YYYYMMDD 형식 (하이픈 없이 8자리, 예: "20250315")
+- date: **이용일자(실제 카드를 사용한 날짜)**, YYYYMMDD 형식 (하이픈 없이 8자리, 예: "20250315").
+  문서에 "이용일자"와 "승인일자(매입일/전표매입일)"가 함께 표기되면 반드시 **이용일자**를 사용할 것. 승인일자는 절대 선택하지 말 것.
 - merchant: 가맹점명 또는 업체명
 - amount: 합계 금액, 숫자만 쉼표 없이 (예: "6500")
 - cardLast4: 카드번호 마지막 4자리. 카드번호가 없거나 알 수 없으면 "0000"
@@ -110,11 +117,17 @@ export async function POST(request: NextRequest) {
     const rows: CardPdfRow[] = (parsed.rows ?? []).map(r => ({
       거래일자: r.date,
       '거래처(가맹점명)': r.merchant,
+      사업자번호: '',
       품명: r.merchant,
+      유형: '',
+      공급가액: '',
+      세액: '',
+      봉사료: '',
       합계: r.amount,
+      차변계정코드: '',
+      대변계정코드: '253',
       공제여부: '불공제',
       거래구분: r.amount.startsWith('-') ? '취소' : '승인',
-      대변계정코드: '253',
       cardLast4: r.cardLast4 || '0000',
     }));
 

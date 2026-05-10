@@ -5,11 +5,17 @@ import * as XLSX from 'xlsx';
 interface CardRow {
   거래일자: string;
   '거래처(가맹점명)': string;
+  사업자번호: string;
   품명: string;
+  유형: string;
+  공급가액: string;
+  세액: string;
+  봉사료: string;
   합계: string;
+  차변계정코드: string;
+  대변계정코드: string;
   공제여부: string;
   거래구분: string;
-  대변계정코드: string;
 }
 
 interface GroupedCard {
@@ -19,8 +25,9 @@ interface GroupedCard {
 
 const EXCEL_EXT = /\.(xls|xlsx|csv)$/i;
 const DOC_EXT = /\.(jpg|jpeg|png|webp|gif|pdf)$/i;
-const CARD_HEADERS = ['거래일자', '거래처(가맹점명)', '품명', '합계', '공제여부', '거래구분', '대변계정코드'];
-const CARD_FIELDS: (keyof CardRow)[] = ['거래일자', '거래처(가맹점명)', '품명', '합계', '공제여부', '거래구분', '대변계정코드'];
+const CARD_HEADERS = ['거래일자', '거래처(가맹점명)', '사업자번호', '품명', '유형', '공급가액', '세액', '봉사료', '합계', '차변계정코드', '대변계정코드', '공제여부', '거래구분'];
+const CARD_FIELDS: (keyof CardRow)[] = ['거래일자', '거래처(가맹점명)', '사업자번호', '품명', '유형', '공급가액', '세액', '봉사료', '합계', '차변계정코드', '대변계정코드', '공제여부', '거래구분'];
+const AMOUNT_FIELDS: (keyof CardRow)[] = ['공급가액', '세액', '봉사료', '합계'];
 
 function BackButton({ onClick }: { onClick: () => void }) {
   return (
@@ -102,11 +109,17 @@ export default function CardConverter({ onBack }: { onBack: () => void }) {
     const rows = rawRows.map(row => ({
       거래일자: mapping.dateCol ? normalizeDate(row[mapping.dateCol] as string | number) : '',
       '거래처(가맹점명)': mapping.merchantCol ? String(row[mapping.merchantCol]) : '',
+      사업자번호: '',
       품명: mapping.merchantCol ? String(row[mapping.merchantCol]) : '',
+      유형: '',
+      공급가액: '',
+      세액: '',
+      봉사료: '',
       합계: mapping.amountCol ? normalizeAmount(row[mapping.amountCol] as string | number) : '',
+      차변계정코드: '',
+      대변계정코드: '253',
       공제여부: '불공제',
       거래구분: '승인',
-      대변계정코드: '253',
       _last4: mapping.cardCol ? extractLast4(row[mapping.cardCol] as string) : '0000',
     }));
 
@@ -184,9 +197,9 @@ export default function CardConverter({ onBack }: { onBack: () => void }) {
     return digits === '' ? '' : Number(digits).toLocaleString('ko-KR');
   };
 
-  const handleAmountChange = (groupLast4: string, rowIdx: number, value: string) => {
+  const handleAmountChange = (groupLast4: string, rowIdx: number, field: keyof CardRow, value: string) => {
     const digits = value.replace(/[^\d]/g, '');
-    updateCell(groupLast4, rowIdx, '합계', digits);
+    updateCell(groupLast4, rowIdx, field, digits);
   };
 
   const downloadGroup = (group: GroupedCard) => {
@@ -292,11 +305,11 @@ export default function CardConverter({ onBack }: { onBack: () => void }) {
                         <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
                           {CARD_FIELDS.map(field => (
                             <td key={field} className="px-2 py-1">
-                              {field === '합계' ? (
+                              {AMOUNT_FIELDS.includes(field) ? (
                                 <input
                                   type="text"
                                   value={formatAmount(row[field])}
-                                  onChange={(e) => handleAmountChange(currentGroup.last4, i, e.target.value)}
+                                  onChange={(e) => handleAmountChange(currentGroup.last4, i, field, e.target.value)}
                                   className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400 text-sm font-bold min-w-[80px] text-right"
                                 />
                               ) : (
