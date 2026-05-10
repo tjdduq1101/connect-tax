@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import type { JournalEntry } from '@/app/api/convert/document/route';
+import AccountAutocomplete from './AccountAutocomplete';
 
 const JOURNAL_HEADERS = ['월', '일', '구분', '계정과목코드', '계정과목명', '거래처코드', '거래처명', '적요명', '차변', '대변'];
 const ENTRY_FIELDS: (keyof JournalEntry)[] = ['month', 'day', 'type', 'accountCode', 'accountName', 'partnerCode', 'partnerName', 'memo', 'debit', 'credit'];
@@ -84,6 +85,11 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
 
   const updateCell = (rowIdx: number, field: keyof JournalEntry, value: string) => {
     setEntries(prev => prev.map((r, i) => i === rowIdx ? { ...r, [field]: value } : r));
+  };
+
+  // 계정과목 코드/이름 페어 동기화: 한쪽 선택 시 두 칸 동시 업데이트
+  const updateAccountPair = (rowIdx: number, code: string, name: string) => {
+    setEntries(prev => prev.map((r, i) => i === rowIdx ? { ...r, accountCode: code, accountName: name } : r));
   };
 
   const formatAmount = (raw: string) => {
@@ -220,13 +226,33 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
                                 className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-violet-50 focus:bg-violet-50 focus:outline-none focus:ring-1 focus:ring-violet-400 text-sm font-bold text-right"
                                 style={{ minWidth: '80px' }}
                               />
+                            ) : field === 'accountCode' ? (
+                              <div style={{ minWidth: '90px' }}>
+                                <AccountAutocomplete
+                                  value={row.accountCode}
+                                  onChange={(v) => updateCell(i, 'accountCode', v)}
+                                  onSelect={(code, name) => updateAccountPair(i, code, name)}
+                                  placeholder="코드"
+                                  className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-violet-50 focus:bg-violet-50 focus:outline-none focus:ring-1 focus:ring-violet-400 text-sm font-bold tabular-nums"
+                                />
+                              </div>
+                            ) : field === 'accountName' ? (
+                              <div style={{ minWidth: '140px' }}>
+                                <AccountAutocomplete
+                                  value={row.accountName}
+                                  onChange={(v) => updateCell(i, 'accountName', v)}
+                                  onSelect={(code, name) => updateAccountPair(i, code, name)}
+                                  placeholder="계정과목명"
+                                  className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-violet-50 focus:bg-violet-50 focus:outline-none focus:ring-1 focus:ring-violet-400 text-sm font-bold"
+                                />
+                              </div>
                             ) : (
                               <input
                                 type="text"
                                 value={row[field]}
                                 onChange={(e) => updateCell(i, field, e.target.value)}
                                 className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-violet-50 focus:bg-violet-50 focus:outline-none focus:ring-1 focus:ring-violet-400 text-sm font-bold"
-                                style={{ minWidth: field === 'memo' || field === 'accountName' ? '100px' : '50px' }}
+                                style={{ minWidth: field === 'memo' ? '100px' : '50px' }}
                               />
                             )}
                           </td>

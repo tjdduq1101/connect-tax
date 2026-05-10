@@ -7,12 +7,12 @@ import {
   convertNotionRules,
   CATEGORY_ACCOUNT_MAP,
   CODE_TO_ACCOUNT,
-  NAME_TO_CODE,
   type TransactionRow,
   type BusinessConditions,
   type ClassificationResult,
   type MatchingRule,
 } from "@/lib/accountClassifier";
+import AccountAutocomplete from "./AccountAutocomplete";
 
 // ============================================================
 // Types
@@ -82,30 +82,7 @@ const BUSINESS_TYPE_OPTIONS = [
   { value: "제조업", label: "제조업" },
 ];
 
-// 상수는 accountClassifier.ts에서 import (CODE_TO_ACCOUNT, NAME_TO_CODE)
-
-// 소모품 코드 보기
-const SOMOUM_CODES = [
-  { code: "530", desc: "제조원가" },
-  { code: "630", desc: "공사원가" },
-  { code: "730", desc: "기타원가" },
-  { code: "830", desc: "판관비(일반)" },
-];
-
-// 입력값 파싱: 코드(숫자) or 계정과목명
-function resolveAccountInput(input: string): { code: string; name: string; needsSomoumPicker: boolean } | null {
-  const v = input.trim();
-  if (/^\d{3}$/.test(v)) {
-    const found = CODE_TO_ACCOUNT[v];
-    if (found) return { code: v, name: found.name, needsSomoumPicker: false };
-  }
-  if (v.includes("소모품")) {
-    return { code: "", name: "소모품비", needsSomoumPicker: true };
-  }
-  const code = NAME_TO_CODE[v];
-  if (code) return { code, name: v, needsSomoumPicker: false };
-  return null;
-}
+// 코드↔계정과목명 매칭 및 추천은 AccountAutocomplete + accountMaster가 담당.
 
 function getEffectiveResult(c: ClassifiedCashRow): ClassificationResult {
   if (c.manualOverride) {
@@ -412,14 +389,12 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
   // 인라인 편집
   const [editingCell, setEditingCell] = useState<{ origIdx: number; field: "account" | "tag" } | null>(null);
   const [editValue, setEditValue] = useState("");
-  const [somoumPicker, setSomoumPicker] = useState<number | null>(null);
 
   // 체크박스 / 일괄 변경
   const [checkedIndices, setCheckedIndices] = useState<Set<number>>(new Set());
   const [lastCheckedFilteredIdx, setLastCheckedFilteredIdx] = useState<number | null>(null);
   const [bulkAccount, setBulkAccount] = useState("");
   const [bulkTag, setBulkTag] = useState("");
-  const [bulkSomoumPicker, setBulkSomoumPicker] = useState(false);
 
   // 업종 조회 캐시 (거래처명 → BusinessInfo)
   const bizCacheRef = useRef<Map<string, BusinessInfo>>(new Map());
@@ -677,7 +652,6 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
       return { ...c, manualOverride: { code, name, tag: currentTag || defaultTag }, changed: true };
     }));
     setBulkAccount("");
-    setBulkSomoumPicker(false);
   };
 
   // 일괄 태그 적용
@@ -690,28 +664,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
     setBulkTag("");
   };
 
-  // 일괄 변경 실행
-  const commitBulk = () => {
-    if (!bulkAccount && !bulkTag) return;
-    if (bulkAccount) {
-      const parsed = resolveAccountInput(bulkAccount);
-      if (!parsed) return;
-      if (parsed.needsSomoumPicker) { setBulkSomoumPicker(true); return; }
-      applyBulkAccount(parsed.code, parsed.name);
-    }
-    if (bulkTag) applyBulkTag(bulkTag);
-    setCheckedIndices(new Set());
-  };
-
-  // 계정과목 편집 확정
-  const commitAccountEdit = (origIdx: number, value: string) => {
-    const parsed = resolveAccountInput(value);
-    if (!parsed) { setEditingCell(null); setSomoumPicker(null); return; }
-    if (parsed.needsSomoumPicker) { setSomoumPicker(origIdx); return; }
-    applyOverride(origIdx, parsed.code, parsed.name);
-  };
-
-  // 소모품 코드 선택
+  // 셀 계정과목 적용
   const applyOverride = (origIdx: number, code: string, name: string) => {
     const defaultTag = CODE_TO_ACCOUNT[code]?.tag ?? "매입";
     setClassified((prev) => prev.map((c, i) => {
@@ -720,7 +673,6 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
       return { ...c, manualOverride: { code, name, tag: currentTag || defaultTag }, changed: true };
     }));
     setEditingCell(null);
-    setSomoumPicker(null);
     setEditValue("");
   };
 
@@ -1058,7 +1010,6 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                         const confColor = c.manualOverride ? "text-blue-500" : c.result.confidence === "high" ? "text-green-500" : c.result.confidence === "medium" ? "text-amber-500" : "text-red-500";
                         const isEditingAccount = editingCell?.origIdx === origIdx && editingCell?.field === "account";
                         const isEditingTag = editingCell?.origIdx === origIdx && editingCell?.field === "tag";
-                        const isShowingSomoum = somoumPicker === origIdx;
 
                         return (
                           <tr key={i} className={`border-t border-slate-200 hover:bg-blue-50/30 transition-colors ${rowBg}`}>
@@ -1076,31 +1027,22 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                             {/* 계정과목 편집 */}
                             <td className="px-3 py-1.5 relative border-r border-slate-200">
                               {isEditingAccount ? (
-                                <div className="flex flex-col gap-1 min-w-[160px]">
-                                  <input autoFocus value={editValue} onChange={(e) => setEditValue(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === "Enter") commitAccountEdit(origIdx, editValue); if (e.key === "Escape") { setEditingCell(null); setSomoumPicker(null); } }}
+                                <div className="flex flex-col gap-1 min-w-[200px]">
+                                  <AccountAutocomplete
+                                    autoFocus
+                                    value={editValue}
+                                    onChange={setEditValue}
+                                    onSelect={(code, name) => applyOverride(origIdx, code, name)}
+                                    onCancel={() => { setEditingCell(null); setEditValue(""); }}
                                     placeholder="코드(830) 또는 계정과목명"
                                     className="w-full px-2 py-1 border border-blue-400 rounded text-[10px] font-bold outline-none bg-white"
                                   />
-                                  {isShowingSomoum && (
-                                    <div className="absolute top-full left-0 z-20 bg-white border border-blue-200 rounded-xl shadow-lg p-2 flex gap-1 flex-wrap">
-                                      <p className="w-full text-[9px] text-slate-400 font-bold mb-1">소모품비 코드 선택:</p>
-                                      {SOMOUM_CODES.map(({ code, desc }) => (
-                                        <button key={code} onClick={() => applyOverride(origIdx, code, "소모품비")}
-                                          className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[10px] font-black transition-colors">
-                                          {code} <span className="font-normal text-slate-500">{desc}</span>
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                  <div className="flex gap-1">
-                                    <button onClick={() => commitAccountEdit(origIdx, editValue)} className="flex-1 px-1 py-0.5 bg-blue-500 text-white rounded text-[9px] font-bold">확인</button>
-                                    <button onClick={() => { setEditingCell(null); setSomoumPicker(null); setEditValue(""); }} className="flex-1 px-1 py-0.5 bg-slate-200 text-slate-600 rounded text-[9px] font-bold">취소</button>
-                                  </div>
+                                  <button onClick={() => { setEditingCell(null); setEditValue(""); }} className="px-1 py-0.5 bg-slate-200 text-slate-600 rounded text-[9px] font-bold">취소</button>
                                 </div>
                               ) : (
-                                <button onClick={() => { setEditingCell({ origIdx, field: "account" }); setEditValue(""); setSomoumPicker(null); }} className="w-full text-left group">
+                                <button onClick={() => { setEditingCell({ origIdx, field: "account" }); setEditValue(""); }} className="w-full text-left group">
                                   <span className={confColor}>{confIcon}</span>{" "}
+                                  {eff.code && <span className="text-[9px] text-slate-400 tabular-nums font-bold mr-1">{eff.code}</span>}
                                   {eff.name || "-"}
                                   {c.manualOverride && <span className="ml-1 text-[8px] text-blue-400 font-bold">[수기]</span>}
                                   <span className="ml-1 text-[8px] text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">✎</span>
@@ -1123,7 +1065,7 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                                   <button onClick={() => setEditingCell(null)} className="px-2 py-0.5 text-[9px] text-slate-400 hover:text-slate-600">취소</button>
                                 </div>
                               ) : (
-                                <button onClick={() => { setEditingCell({ origIdx, field: "tag" }); setSomoumPicker(null); }} className="group">
+                                <button onClick={() => { setEditingCell({ origIdx, field: "tag" }); }} className="group">
                                   {eff.tag ? (
                                     <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${tagColor} group-hover:opacity-80 transition-opacity`}>{eff.tag}</span>
                                   ) : <span className="text-slate-300 text-[9px]">-</span>}
@@ -1147,24 +1089,20 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                 <div className="bg-blue-600 rounded-2xl p-4 flex flex-wrap items-center gap-3 shadow-lg">
                   <span className="text-white font-black text-sm">{checkedIndices.size}개 선택됨</span>
                   <div className="flex-1 flex flex-wrap gap-2">
-                    <div className="relative flex-1 min-w-[160px]">
-                      <input
+                    <div className="flex-1 min-w-[200px]">
+                      <AccountAutocomplete
                         value={bulkAccount}
-                        onChange={(e) => { setBulkAccount(e.target.value); setBulkSomoumPicker(false); }}
+                        onChange={setBulkAccount}
+                        onSelect={(code, name) => {
+                          applyBulkAccount(code, name);
+                          if (bulkTag) applyBulkTag(bulkTag);
+                          setCheckedIndices(new Set());
+                          setBulkTag("");
+                        }}
                         placeholder="코드(830) 또는 계정과목명"
                         className="w-full px-3 py-2 rounded-xl text-xs font-bold outline-none bg-white text-slate-700"
+                        dropdownPosition="above"
                       />
-                      {bulkSomoumPicker && (
-                        <div className="absolute bottom-full mb-1 left-0 z-20 bg-white border border-blue-200 rounded-xl shadow-lg p-2 flex gap-1 flex-wrap min-w-[220px]">
-                          <p className="w-full text-[9px] text-slate-400 font-bold mb-1">소모품비 코드 선택:</p>
-                          {SOMOUM_CODES.map(({ code, desc }) => (
-                            <button key={code} onClick={() => { applyBulkAccount(code, "소모품비"); if (bulkTag) applyBulkTag(bulkTag); setCheckedIndices(new Set()); setBulkTag(""); }}
-                              className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-[10px] font-black transition-colors">
-                              {code} <span className="font-normal text-slate-500">{desc}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                     <select value={bulkTag} onChange={(e) => setBulkTag(e.target.value)}
                       className="px-3 py-2 rounded-xl text-xs font-bold outline-none bg-white text-slate-700">
@@ -1173,9 +1111,17 @@ export default function CashReceiptClassifier({ onBack }: { onBack: () => void }
                       <option value="일반">일반</option>
                       <option value="전송제외">전송제외</option>
                     </select>
-                    <button onClick={commitBulk} className="px-4 py-2 bg-white text-blue-600 rounded-xl text-xs font-black hover:bg-blue-50 transition-colors">일괄 적용</button>
+                    <button
+                      onClick={() => {
+                        if (bulkTag) applyBulkTag(bulkTag);
+                        setCheckedIndices(new Set());
+                      }}
+                      className="px-4 py-2 bg-white text-blue-600 rounded-xl text-xs font-black hover:bg-blue-50 transition-colors"
+                    >
+                      구분만 적용
+                    </button>
                   </div>
-                  <button onClick={() => { setCheckedIndices(new Set()); setBulkAccount(""); setBulkTag(""); setBulkSomoumPicker(false); }}
+                  <button onClick={() => { setCheckedIndices(new Set()); setBulkAccount(""); setBulkTag(""); }}
                     className="text-blue-200 hover:text-white text-xs font-bold transition-colors">선택 해제</button>
                 </div>
               )}

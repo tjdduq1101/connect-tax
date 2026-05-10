@@ -2,6 +2,8 @@
 // 공유 분류 엔진 — BusinessLookup + AccountRecommend 공통
 // ============================================================
 
+import { ACCOUNT_MASTER, NAME_TO_CODE_PRIMARY, type AccountMasterEntry } from './accountMaster';
+
 // ── Types ──
 export interface CategoryInfo {
   label: string;
@@ -257,103 +259,57 @@ export const CATEGORY_ACCOUNT_MAP: Record<string, { code: string; name: string; 
   '자동차': { code: '820', name: '수선비', tag: '매입' },
 };
 
-// ── 계정과목명 → 코드 변환 (SmartA10 업로드용) ──
-export const ACCOUNT_NAME_TO_CODE: Record<string, string> = {
-  '상품': '146',
-  '원재료': '153',
-  '미지급금': '253',
-  '현금': '101',
-  '보통예금': '103',
-  '외상매출금': '108',
-  '받을어음': '110',
-  '선급금': '131',
-  '미수금': '135',
-  '가지급금': '136',
-  '임원급여': '801',
-  '직원급여': '802',
-  '상여금': '803',
-  '제수당': '804',
-  '잡급': '805',
-  '퇴직급여': '806',
-  '복리후생비': '811',
-  '여비교통비': '812',
-  '접대비': '813',
-  '통신비': '814',
-  '수도광열비': '815',
-  '전력비': '816',
-  '세금과공과금': '817',
-  '감가상각비': '818',
-  '지급임차료': '819',
-  '수선비': '820',
-  '보험료': '821',
-  '차량유지비': '822',
-  '경상연구개발비': '823',
-  '운반비': '824',
-  '교육훈련비': '825',
-  '도서인쇄비': '826',
-  '회의비': '827',
-  '포장비': '828',
-  '사무용품비': '829',
-  '소모품비': '830',
-  '지급수수료': '831',
-  '보관료': '832',
-  '광고선전비': '833',
-  '판매촉진비': '834',
-  '대손상각비': '835',
-  '건물관리비': '837',
+// ── 비즈니스 태그(매입/일반) 산출: 전송용 태그는 PDF 외 비즈니스 룰 ──
+// 동명의 코드 중 NAME_TO_CODE_PRIMARY는 가장 큰 코드를 우선(판관비 8xx 우선).
+// "접대비"는 PDF상 "접대비(기업업무추진비)"이므로 별칭으로도 조회 가능하게 처리.
+const GENERAL_TAG_NAMES = new Set<string>([
+  '접대비(기업업무추진비)',
+  '해외접대비(기업업무추진비)',
+  '세금과공과금',
+  '감가상각비',
+  '보험료',
+  '대손상각비',
+]);
+
+function defaultTagFor(entry: AccountMasterEntry): string {
+  if (entry.category.startsWith('인건비') || entry.category.startsWith('노무비')) return '';
+  if (entry.category === '경비') {
+    return GENERAL_TAG_NAMES.has(entry.name) ? '일반' : '매입';
+  }
+  if (entry.category === '일반재고' || entry.category === '공정재고') return '매입';
+  if (entry.category === '원재료비' || entry.category === '부재료비' || entry.category === '기타') return '매입';
+  return '';
+}
+
+// ── 계정과목명 별칭 (PDF 정식명 ↔ 통용명) ──
+// 외부 시스템·기존 코드에서 줄여 쓰는 명칭을 PDF 정식명으로 매핑하기 위한 보조 테이블.
+const NAME_ALIASES: Record<string, string> = {
+  '접대비': '접대비(기업업무추진비)',
+  '해외접대비': '해외접대비(기업업무추진비)',
 };
 
-// ── 코드 → 계정과목 매핑 (공유) ──
-export const CODE_TO_ACCOUNT: Record<string, { name: string; tag: string }> = {
-  "146": { name: "상품", tag: "매입" },
-  "153": { name: "원재료", tag: "매입" },
-  "530": { name: "소모품비", tag: "매입" },
-  "630": { name: "소모품비", tag: "매입" },
-  "730": { name: "소모품비", tag: "매입" },
-  "801": { name: "임원급여", tag: "" },
-  "802": { name: "직원급여", tag: "" },
-  "803": { name: "상여금", tag: "" },
-  "811": { name: "복리후생비", tag: "매입" },
-  "812": { name: "여비교통비", tag: "매입" },
-  "813": { name: "접대비", tag: "일반" },
-  "814": { name: "통신비", tag: "매입" },
-  "815": { name: "수도광열비", tag: "매입" },
-  "816": { name: "전력비", tag: "매입" },
-  "817": { name: "세금과공과금", tag: "일반" },
-  "818": { name: "감가상각비", tag: "일반" },
-  "819": { name: "지급임차료", tag: "매입" },
-  "820": { name: "수선비", tag: "매입" },
-  "821": { name: "보험료", tag: "일반" },
-  "822": { name: "차량유지비", tag: "매입" },
-  "823": { name: "경상연구개발비", tag: "매입" },
-  "824": { name: "운반비", tag: "매입" },
-  "825": { name: "교육훈련비", tag: "매입" },
-  "826": { name: "도서인쇄비", tag: "매입" },
-  "827": { name: "회의비", tag: "매입" },
-  "828": { name: "포장비", tag: "매입" },
-  "829": { name: "사무용품비", tag: "매입" },
-  "830": { name: "소모품비", tag: "매입" },
-  "831": { name: "지급수수료", tag: "매입" },
-  "832": { name: "보관료", tag: "매입" },
-  "833": { name: "광고선전비", tag: "매입" },
-  "834": { name: "판매촉진비", tag: "매입" },
-  "835": { name: "대손상각비", tag: "일반" },
-  "837": { name: "건물관리비", tag: "매입" },
-};
+// ── 코드 → 계정과목 매핑 (마스터에서 자동 생성, 비즈니스 태그 결합) ──
+export const CODE_TO_ACCOUNT: Record<string, { name: string; tag: string }> = (() => {
+  const m: Record<string, { name: string; tag: string }> = {};
+  for (const e of ACCOUNT_MASTER) {
+    m[e.code] = { name: e.name, tag: defaultTagFor(e) };
+  }
+  return m;
+})();
 
-// ── 계정과목명 → 코드 변환 (역매핑) ──
-export const NAME_TO_CODE: Record<string, string> = {
-  "복리후생비": "811", "여비교통비": "812", "접대비": "813",
-  "통신비": "814", "수도광열비": "815", "전력비": "816",
-  "세금과공과금": "817", "감가상각비": "818", "지급임차료": "819",
-  "수선비": "820", "보험료": "821", "차량유지비": "822",
-  "경상연구개발비": "823", "운반비": "824", "교육훈련비": "825",
-  "도서인쇄비": "826", "회의비": "827", "포장비": "828",
-  "사무용품비": "829", "지급수수료": "831", "보관료": "832",
-  "소모품비": "830", "광고선전비": "833", "판매촉진비": "834", "대손상각비": "835",
-  "건물관리비": "837", "임원급여": "801", "직원급여": "802", "상여금": "803",
-  "상품": "146", "원재료": "153",
-};
+// ── 계정과목명 → 코드 매핑 (마스터 기반 + 별칭) ──
+// 동명 중복 시 가장 큰 코드(판관비 8xx) 우선.
+export const NAME_TO_CODE: Record<string, string> = (() => {
+  const m: Record<string, string> = { ...NAME_TO_CODE_PRIMARY };
+  for (const [alias, canonical] of Object.entries(NAME_ALIASES)) {
+    const code = NAME_TO_CODE_PRIMARY[canonical];
+    if (code) m[alias] = code;
+  }
+  return m;
+})();
+
+// ── SmartA10 업로드용 별칭 (NAME_TO_CODE와 동일 매핑) ──
+export const ACCOUNT_NAME_TO_CODE: Record<string, string> = NAME_TO_CODE;
 
 // ── 공통 함수 ──
 
