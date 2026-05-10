@@ -77,7 +77,7 @@ export default function AccountAutocomplete({
   maxItems = 15,
 }: Props) {
   const [highlight, setHighlight] = useState(0);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
