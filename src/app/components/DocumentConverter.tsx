@@ -17,9 +17,9 @@ function BackButton({ onClick }: { onClick: () => void }) {
 
 function CalcHeader({ title }: { title: string }) {
   return (
-    <div className="bg-blue-600 p-8 text-center text-white">
+    <div className="bg-violet-600 p-8 text-center text-white">
       <h1 className="text-2xl font-black mb-1">{title}</h1>
-      <p className="text-blue-100 text-xs font-bold uppercase tracking-widest opacity-80">Connect Tax Services</p>
+      <p className="text-violet-100 text-xs font-bold uppercase tracking-widest opacity-80">Connect Tax Services</p>
     </div>
   );
 }
@@ -134,7 +134,7 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
             onDrop={handleDrop}
             onClick={() => fileRef.current?.click()}
             className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all ${
-              isDragging ? 'border-blue-400 bg-blue-50' : 'border-slate-200 hover:border-blue-400 hover:bg-slate-50'
+              isDragging ? 'border-violet-400 bg-violet-50' : 'border-slate-200 hover:border-violet-400 hover:bg-slate-50'
             }`}
           >
             <input
@@ -147,13 +147,13 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
             <div className="text-3xl mb-2">📄</div>
             <p className="font-bold text-slate-600">파일을 드래그하거나 클릭해서 업로드</p>
             <p className="text-xs text-slate-400 font-bold mt-1">PDF · JPG · PNG · WEBP 지원 — 문서 유형은 AI가 자동 판단</p>
-            {fileName && <p className="mt-3 text-sm font-bold text-blue-600">{fileName}</p>}
+            {fileName && <p className="mt-3 text-sm font-bold text-violet-600">{fileName}</p>}
           </div>
 
           {/* 로딩 */}
           {loading && (
             <div className="text-center py-6">
-              <div className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
+              <div className="inline-block w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin mb-3" />
               <p className="text-sm font-bold text-slate-500">AI가 문서를 분석 중입니다...</p>
             </div>
           )}
@@ -173,13 +173,13 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
                 <div className="flex gap-2">
                   <button
                     onClick={addRow}
-                    className="px-4 py-2 border-2 border-dashed border-slate-300 hover:border-blue-400 text-slate-500 hover:text-blue-600 rounded-xl text-sm font-bold transition-colors"
+                    className="px-4 py-2 border-2 border-dashed border-slate-300 hover:border-violet-400 text-slate-500 hover:text-violet-600 rounded-xl text-sm font-bold transition-colors"
                   >
                     + 행 추가
                   </button>
                   <button
                     onClick={download}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition-colors"
+                    className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-bold transition-colors"
                   >
                     일반전표올리기.xlsx 다운로드
                   </button>
@@ -205,7 +205,7 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
                               <select
                                 value={row[field]}
                                 onChange={(e) => updateCell(i, field, e.target.value)}
-                                className="px-2 py-1 rounded-lg bg-transparent hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400 text-sm font-bold"
+                                className="px-2 py-1 rounded-lg bg-transparent hover:bg-violet-50 focus:bg-violet-50 focus:outline-none focus:ring-1 focus:ring-violet-400 text-sm font-bold"
                               >
                                 <option value="출금">출금</option>
                                 <option value="입금">입금</option>
@@ -217,7 +217,7 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
                                 type="text"
                                 value={formatAmount(row[field])}
                                 onChange={(e) => handleAmountChange(i, field, e.target.value)}
-                                className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400 text-sm font-bold text-right"
+                                className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-violet-50 focus:bg-violet-50 focus:outline-none focus:ring-1 focus:ring-violet-400 text-sm font-bold text-right"
                                 style={{ minWidth: '80px' }}
                               />
                             ) : (
@@ -225,7 +225,7 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
                                 type="text"
                                 value={row[field]}
                                 onChange={(e) => updateCell(i, field, e.target.value)}
-                                className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400 text-sm font-bold"
+                                className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-violet-50 focus:bg-violet-50 focus:outline-none focus:ring-1 focus:ring-violet-400 text-sm font-bold"
                                 style={{ minWidth: field === 'memo' || field === 'accountName' ? '100px' : '50px' }}
                               />
                             )}

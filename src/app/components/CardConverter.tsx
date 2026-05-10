@@ -39,9 +39,9 @@ function BackButton({ onClick }: { onClick: () => void }) {
 
 function CalcHeader({ title }: { title: string }) {
   return (
-    <div className="bg-blue-600 p-8 text-center text-white">
+    <div className="bg-violet-600 p-8 text-center text-white">
       <h1 className="text-2xl font-black mb-1">{title}</h1>
-      <p className="text-blue-100 text-xs font-bold uppercase tracking-widest opacity-80">Connect Tax Services</p>
+      <p className="text-violet-100 text-xs font-bold uppercase tracking-widest opacity-80">Connect Tax Services</p>
     </div>
   );
 }
@@ -227,7 +227,7 @@ export default function CardConverter({ onBack }: { onBack: () => void }) {
             onDrop={handleDrop}
             onClick={() => fileRef.current?.click()}
             className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all ${
-              isDragging ? 'border-blue-400 bg-blue-50' : 'border-slate-200 hover:border-blue-400 hover:bg-slate-50'
+              isDragging ? 'border-violet-400 bg-violet-50' : 'border-slate-200 hover:border-violet-400 hover:bg-slate-50'
             }`}
           >
             <input
@@ -240,12 +240,12 @@ export default function CardConverter({ onBack }: { onBack: () => void }) {
             <div className="text-3xl mb-2">💳</div>
             <p className="font-bold text-slate-600">카드내역 파일을 드래그하거나 클릭해서 업로드</p>
             <p className="text-xs text-slate-400 font-bold mt-1">엑셀(.xls · .xlsx · .csv) · PDF · 이미지(JPG · PNG) 지원</p>
-            {fileName && <p className="mt-3 text-sm font-bold text-blue-600">{fileName}</p>}
+            {fileName && <p className="mt-3 text-sm font-bold text-violet-600">{fileName}</p>}
           </div>
 
           {loading && (
             <div className="text-center py-6">
-              <div className="inline-block w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-3" />
+              <div className="inline-block w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin mb-3" />
               <p className="text-sm font-bold text-slate-500">AI가 카드내역을 분석 중입니다...</p>
             </div>
           )}
@@ -266,7 +266,7 @@ export default function CardConverter({ onBack }: { onBack: () => void }) {
                       onClick={() => setActiveGroup(g.last4)}
                       className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
                         activeGroup === g.last4
-                          ? 'bg-blue-600 text-white shadow'
+                          ? 'bg-violet-600 text-white shadow'
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
@@ -285,7 +285,7 @@ export default function CardConverter({ onBack }: { onBack: () => void }) {
                   )}
                   <button
                     onClick={downloadAll}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition-colors"
+                    className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-bold transition-colors"
                   >
                     전체 다운로드 ({groups.length}개)
                   </button>
@@ -310,14 +310,14 @@ export default function CardConverter({ onBack }: { onBack: () => void }) {
                                   type="text"
                                   value={formatAmount(row[field])}
                                   onChange={(e) => handleAmountChange(currentGroup.last4, i, field, e.target.value)}
-                                  className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400 text-sm font-bold min-w-[80px] text-right"
+                                  className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-violet-50 focus:bg-violet-50 focus:outline-none focus:ring-1 focus:ring-violet-400 text-sm font-bold min-w-[80px] text-right"
                                 />
                               ) : (
                                 <input
                                   type="text"
                                   value={row[field]}
                                   onChange={(e) => updateCell(currentGroup.last4, i, field, e.target.value)}
-                                  className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400 text-sm font-bold min-w-[80px]"
+                                  className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-violet-50 focus:bg-violet-50 focus:outline-none focus:ring-1 focus:ring-violet-400 text-sm font-bold min-w-[80px]"
                                 />
                               )}
                             </td>
