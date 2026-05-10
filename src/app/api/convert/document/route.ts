@@ -21,7 +21,15 @@ export interface JournalEntry {
   credit: string;
 }
 
-const PROMPT = `당신은 한국 세무회계 전문가입니다. 이 문서를 분석하여 일반전표 항목으로 변환해주세요.
+const COST_TYPE_MAP: Record<string, { range: string; label: string; commsCode: string }> = {
+  '제조': { range: '500~599', label: '제조원가', commsCode: '514' },
+  '도급': { range: '600~699', label: '도급공사', commsCode: '614' },
+  '판관비': { range: '800~899', label: '판매관리비', commsCode: '814' },
+};
+
+function buildPrompt(costType: string): string {
+  const ct = COST_TYPE_MAP[costType] ?? COST_TYPE_MAP['판관비'];
+  return `당신은 한국 세무회계 전문가입니다. 이 문서를 분석하여 일반전표 항목으로 변환해주세요.
 
 문서 유형을 스스로 판단하고 아래 규칙에 따라 분개하세요:
 
@@ -31,10 +39,10 @@ const PROMPT = `당신은 한국 세무회계 전문가입니다. 이 문서를 
 - 원금과 이자를 반드시 별도 행으로 분리
 
 【통신비납부내역서인 경우】
-- 구분=출금, 계정과목코드=814, 계정과목명=통신비, 차변=납부금액, 대변=빈칸
+- 구분=출금, 계정과목코드=${ct.commsCode}, 계정과목명=통신비, 차변=납부금액, 대변=빈칸
 
 【기타 경비(영수증, 세금계산서 등)인 경우】
-- 구분=출금, 계정과목코드·계정과목명은 내용에 맞게 추정, 차변=금액, 대변=빈칸
+- 구분=출금, 계정과목코드·계정과목명은 ${ct.label}(${ct.range}) 범위에서 내용에 맞게 선택, 차변=금액, 대변=빈칸
 
 공통 규칙:
 - 금액은 숫자만 (쉼표·원 표시 제거)
@@ -44,6 +52,7 @@ const PROMPT = `당신은 한국 세무회계 전문가입니다. 이 문서를 
 
 반드시 아래 JSON 형식으로만 반환하세요. 다른 텍스트 없이 JSON만:
 {"entries":[{"month":"","day":"","type":"출금","accountCode":"","accountName":"","partnerCode":"","partnerName":"","memo":"","debit":"","credit":""}]}`;
+}
 
 async function waitForFileActive(fileManager: GoogleAIFileManager, fileName: string): Promise<void> {
   let file = await fileManager.getFile(fileName);
@@ -67,6 +76,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
+    const costType = (formData.get('costType') as string | null) ?? '판관비';
 
     if (!file) {
       return Response.json({ error: '파일이 없습니다.' }, { status: 400 });
@@ -77,6 +87,7 @@ export async function POST(request: NextRequest) {
     const isPdf = mimeType === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     debugInfo = { fileName: file.name, fileType: mimeType, fileSize: buffer.length };
 
+    const PROMPT = buildPrompt(costType);
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     let text: string;

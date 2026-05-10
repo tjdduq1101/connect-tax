@@ -25,6 +25,9 @@ function CalcHeader({ title }: { title: string }) {
   );
 }
 
+type CostType = '제조' | '도급' | '판관비';
+const COST_TYPES: CostType[] = ['제조', '도급', '판관비'];
+
 export default function DocumentConverter({ onBack }: { onBack: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -32,6 +35,14 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [costType, setCostType] = useState<CostType>('판관비');
+
+  const handleCostTypeChange = (type: CostType) => {
+    setCostType(type);
+    setEntries([]);
+    setFileName('');
+    setError('');
+  };
 
   const processFile = async (file: File) => {
     setError('');
@@ -42,6 +53,7 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('costType', costType);
 
       const res = await fetch('/api/convert/document', {
         method: 'POST',
@@ -132,6 +144,26 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
         <CalcHeader title="문서 → 일반전표 변환기" />
         <div className="p-8 space-y-6">
+
+          {/* 비용 구분 선택 */}
+          <div>
+            <p className="text-[11px] font-black text-slate-400 uppercase tracking-wider mb-2">비용 구분</p>
+            <div className="flex gap-2">
+              {COST_TYPES.map(type => (
+                <button
+                  key={type}
+                  onClick={() => handleCostTypeChange(type)}
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                    costType === type
+                      ? 'bg-violet-600 text-white shadow'
+                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* 파일 업로드 */}
           <div
