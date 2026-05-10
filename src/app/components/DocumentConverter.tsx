@@ -86,6 +86,16 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
     setEntries(prev => prev.map((r, i) => i === rowIdx ? { ...r, [field]: value } : r));
   };
 
+  const formatAmount = (raw: string) => {
+    const digits = raw.replace(/[^\d]/g, '');
+    return digits === '' ? '' : Number(digits).toLocaleString('ko-KR');
+  };
+
+  const handleAmountChange = (rowIdx: number, field: 'debit' | 'credit', value: string) => {
+    const digits = value.replace(/[^\d]/g, '');
+    updateCell(rowIdx, field, digits);
+  };
+
   const addRow = () => {
     setEntries(prev => [...prev, {
       month: '', day: '', type: '출금',
@@ -202,6 +212,14 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
                                 <option value="차변">차변</option>
                                 <option value="대변">대변</option>
                               </select>
+                            ) : (field === 'debit' || field === 'credit') ? (
+                              <input
+                                type="text"
+                                value={formatAmount(row[field])}
+                                onChange={(e) => handleAmountChange(i, field, e.target.value)}
+                                className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400 text-sm font-bold text-right"
+                                style={{ minWidth: '80px' }}
+                              />
                             ) : (
                               <input
                                 type="text"

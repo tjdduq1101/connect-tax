@@ -179,6 +179,16 @@ export default function CardConverter({ onBack }: { onBack: () => void }) {
     }));
   };
 
+  const formatAmount = (raw: string) => {
+    const digits = raw.replace(/[^\d]/g, '');
+    return digits === '' ? '' : Number(digits).toLocaleString('ko-KR');
+  };
+
+  const handleAmountChange = (groupLast4: string, rowIdx: number, value: string) => {
+    const digits = value.replace(/[^\d]/g, '');
+    updateCell(groupLast4, rowIdx, '합계', digits);
+  };
+
   const downloadGroup = (group: GroupedCard) => {
     const wsData = [CARD_HEADERS, ...group.rows.map(r => CARD_FIELDS.map(f => r[f]))];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
@@ -282,12 +292,21 @@ export default function CardConverter({ onBack }: { onBack: () => void }) {
                         <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
                           {CARD_FIELDS.map(field => (
                             <td key={field} className="px-2 py-1">
-                              <input
-                                type="text"
-                                value={row[field]}
-                                onChange={(e) => updateCell(currentGroup.last4, i, field, e.target.value)}
-                                className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400 text-sm font-bold min-w-[80px]"
-                              />
+                              {field === '합계' ? (
+                                <input
+                                  type="text"
+                                  value={formatAmount(row[field])}
+                                  onChange={(e) => handleAmountChange(currentGroup.last4, i, e.target.value)}
+                                  className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400 text-sm font-bold min-w-[80px] text-right"
+                                />
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={row[field]}
+                                  onChange={(e) => updateCell(currentGroup.last4, i, field, e.target.value)}
+                                  className="w-full px-2 py-1 rounded-lg bg-transparent hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-1 focus:ring-blue-400 text-sm font-bold min-w-[80px]"
+                                />
+                              )}
                             </td>
                           ))}
                         </tr>
