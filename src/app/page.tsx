@@ -701,10 +701,10 @@ const menuGroups: MenuGroup[] = [
     items: [
       { key: 'businessLookup', icon: '\uD83D\uDD0D', title: '사업자 조회', desc: '사업자등록번호 조회 및 업종 분류' },
       { key: 'bizStatusBulk', icon: '\uD83C\uDFE2', title: '사업자상태조회', desc: '폐업·휴업·과세유형 일괄 조회' },
-      { key: 'accountRecommend', icon: '\uD83D\uDCCB', title: '카드전표 계정과목 분류', desc: '카드매입 엑셀 자동 분류 및 SmartA10 변환' },
+      { key: 'accountRecommend', icon: '\uD83D\uDCCB', title: '카드전표 계정과목 분류 (AI 분류 일시 중지)', desc: '카드매입 엑셀 자동 분류 및 SmartA10 변환' },
       { key: 'cashReceiptClassifier', icon: '\uD83E\uDDFE', title: '현금영수증 계정과목 분류', desc: '현금영수증 매입 엑셀 업종 조회 및 자동 분류' },
       { key: 'incomeExpense', icon: '📊', title: '사업소득 비용 자동 분배', desc: '업종코드 기반 필요경비 계정과목별 자동 분배' },
-      { key: 'cardConverter', icon: '💳', title: '카드내역 업로드 변환기(미완성)', desc: '카드사 엑셀 → 위하고 카드업로드 양식 자동 변환' },
+      { key: 'cardConverter', icon: '💳', title: '카드내역 업로드 변환기 (일시 중지)', desc: '카드사 엑셀 → 위하고 카드업로드 양식 자동 변환' },
       { key: 'documentConverter', icon: '🧾', title: '문서 → 일반전표 변환기', desc: '기타영수증(원리금상환내역서, 통신비내역) 등 일반전표 변환' },
     ],
   },

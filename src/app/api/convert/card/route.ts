@@ -13,7 +13,14 @@ interface CardMappingResult {
   cardCol: string;
 }
 
+// 기능 일시 중지 플래그 — 추후 재활성화 시 false로 변경
+const FEATURE_DISABLED = true;
+
 export async function POST(request: NextRequest) {
+  if (FEATURE_DISABLED) {
+    return Response.json({ error: '카드 내역 변환 기능은 현재 사용할 수 없습니다.' }, { status: 503 });
+  }
+
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return Response.json({ error: 'GEMINI_API_KEY가 설정되지 않았습니다.' }, { status: 503 });

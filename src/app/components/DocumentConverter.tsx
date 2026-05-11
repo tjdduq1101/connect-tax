@@ -31,8 +31,9 @@ const COST_TYPES: CostType[] = ['제조', '도급', '판관비'];
 export default function DocumentConverter({ onBack }: { onBack: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [fileName, setFileName] = useState('');
+  const [fileNames, setFileNames] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number; name: string } | null>(null);
   const [error, setError] = useState('');
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [costType, setCostType] = useState<CostType>('판관비');
@@ -40,59 +41,80 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
   const handleCostTypeChange = (type: CostType) => {
     setCostType(type);
     setEntries([]);
-    setFileName('');
+    setFileNames([]);
     setError('');
   };
 
-  const processFile = async (file: File) => {
+  const processOneFile = async (file: File): Promise<JournalEntry[]> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('costType', costType);
+
+    const res = await fetch('/api/convert/document', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      const debugStr = err.debug ? ` [${err.debug.fileName}, ${err.debug.fileType}, ${err.debug.fileSize}bytes]` : '';
+      throw new Error((err.error ?? 'API 오류') + debugStr);
+    }
+
+    const data = await res.json();
+    return data.entries ?? [];
+  };
+
+  const processFiles = async (files: File[]) => {
     setError('');
     setEntries([]);
-    setFileName(file.name);
+    setFileNames(files.map(f => f.name));
     setLoading(true);
 
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('costType', costType);
+    const allEntries: JournalEntry[] = [];
+    const failures: string[] = [];
 
-      const res = await fetch('/api/convert/document', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        const debugStr = err.debug ? ` [${err.debug.fileName}, ${err.debug.fileType}, ${err.debug.fileSize}bytes]` : '';
-        throw new Error((err.error ?? 'API 오류') + debugStr);
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setProgress({ current: i + 1, total: files.length, name: file.name });
+      try {
+        const fetched = await processOneFile(file);
+        if (fetched.length === 0) {
+          failures.push(`${file.name}: 추출 데이터 없음`);
+        } else {
+          allEntries.push(...fetched);
+          setEntries([...allEntries]);
+        }
+      } catch (e: unknown) {
+        failures.push(`${file.name}: ${e instanceof Error ? e.message : '처리 실패'}`);
       }
+    }
 
-      const data = await res.json();
-      const fetched: JournalEntry[] = data.entries ?? [];
-      setEntries(fetched);
-
-      if (fetched.length === 0) {
-        setError('문서에서 데이터를 추출하지 못했습니다. 파일 품질을 확인해주세요.');
-      }
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : '처리 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(false);
+    setProgress(null);
+    setLoading(false);
+    if (failures.length > 0) {
+      setError(failures.join(' / '));
     }
   };
 
-  const handleFile = (file: File) => {
-    if (!ACCEPTED_EXT.test(file.name)) {
+  const handleFiles = (files: File[]) => {
+    const valid = files.filter(f => ACCEPTED_EXT.test(f.name));
+    const invalidCount = files.length - valid.length;
+    if (valid.length === 0) {
       setError('JPG, PNG, WEBP, GIF, PDF 파일만 지원합니다.');
       return;
     }
-    processFile(file);
+    if (invalidCount > 0) {
+      setError(`지원하지 않는 파일 ${invalidCount}개는 건너뜁니다.`);
+    }
+    processFiles(valid);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) handleFiles(files);
   };
 
   const updateCell = (rowIdx: number, field: keyof JournalEntry, value: string) => {
@@ -178,21 +200,34 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
             <input
               ref={fileRef}
               type="file"
+              multiple
               accept=".jpg,.jpeg,.png,.webp,.gif,.pdf"
               className="hidden"
-              onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }}
+              onChange={(e) => {
+                const files = e.target.files ? Array.from(e.target.files) : [];
+                if (files.length > 0) handleFiles(files);
+                e.target.value = '';
+              }}
             />
             <div className="text-3xl mb-2">📄</div>
-            <p className="font-bold text-slate-600">파일을 드래그하거나 클릭해서 업로드</p>
+            <p className="font-bold text-slate-600">파일을 드래그하거나 클릭해서 업로드 (여러 개 가능)</p>
             <p className="text-xs text-slate-400 font-bold mt-1">PDF · JPG · PNG · WEBP 지원 — 문서 유형은 AI가 자동 판단</p>
-            {fileName && <p className="mt-3 text-sm font-bold text-violet-600">{fileName}</p>}
+            {fileNames.length > 0 && (
+              <p className="mt-3 text-sm font-bold text-violet-600">
+                {fileNames.length === 1 ? fileNames[0] : `${fileNames.length}개 파일 선택됨`}
+              </p>
+            )}
           </div>
 
           {/* 로딩 */}
           {loading && (
             <div className="text-center py-6">
               <div className="inline-block w-8 h-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin mb-3" />
-              <p className="text-sm font-bold text-slate-500">AI가 문서를 분석 중입니다...</p>
+              <p className="text-sm font-bold text-slate-500">
+                {progress
+                  ? `AI 분석 중... (${progress.current}/${progress.total}) ${progress.name}`
+                  : 'AI가 문서를 분석 중입니다...'}
+              </p>
             </div>
           )}
 
