@@ -47,11 +47,28 @@ function buildPrompt(costType: string): string {
 공통 규칙:
 - 금액은 숫자만 (쉼표·원 표시 제거)
 - month, day는 숫자만 (예: "3", "15")
+- 문서에 일(day) 정보가 없고 월(month)만 있는 경우 day는 빈 문자열로 둘 것 (서버에서 말일로 자동 보정)
 - 거래처코드·거래처명은 빈 문자열
 - 적요명은 항목 내용을 간략히 (예: "원금 상환", "이자 지급", "통신비 3월")
 
 반드시 아래 JSON 형식으로만 반환하세요. 다른 텍스트 없이 JSON만:
 {"entries":[{"month":"","day":"","type":"출금","accountCode":"","accountName":"","partnerCode":"","partnerName":"","memo":"","debit":"","credit":""}]}`;
+}
+
+const MONTH_END_DAYS: Record<number, number> = {
+  1: 31, 2: 28, 3: 31, 4: 30, 5: 31, 6: 30,
+  7: 31, 8: 31, 9: 30, 10: 31, 11: 30, 12: 31,
+};
+
+function fillMissingDaysWithMonthEnd(entries: JournalEntry[]): JournalEntry[] {
+  return entries.map(entry => {
+    const monthNum = Number(entry.month);
+    const endDay = MONTH_END_DAYS[monthNum];
+    if (endDay && entry.day.trim() === '') {
+      return { ...entry, day: String(endDay) };
+    }
+    return entry;
+  });
 }
 
 async function waitForFileActive(fileManager: GoogleAIFileManager, fileName: string): Promise<void> {
@@ -129,7 +146,8 @@ export async function POST(request: NextRequest) {
     }
 
     const parsed = JSON.parse(jsonMatch[0]) as { entries: JournalEntry[] };
-    return Response.json({ entries: parsed.entries ?? [] });
+    const entries = fillMissingDaysWithMonthEnd(parsed.entries ?? []);
+    return Response.json({ entries });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : '알 수 없는 오류';
     return Response.json({ error: message, debug: debugInfo }, { status: 500 });
