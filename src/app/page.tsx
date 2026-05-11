@@ -705,7 +705,7 @@ const menuGroups: MenuGroup[] = [
       { key: 'cashReceiptClassifier', icon: '\uD83E\uDDFE', title: '현금영수증 계정과목 분류', desc: '현금영수증 매입 엑셀 업종 조회 및 자동 분류' },
       { key: 'incomeExpense', icon: '📊', title: '사업소득 비용 자동 분배', desc: '업종코드 기반 필요경비 계정과목별 자동 분배' },
       { key: 'cardConverter', icon: '💳', title: '카드내역 업로드 변환기', desc: '카드사 엑셀 → 위하고 카드업로드 양식 자동 변환' },
-      { key: 'documentConverter', icon: '🧾', title: '문서 → 일반전표 변환기', desc: '원리금상환·통신비 이미지 → 일반전표 자동 생성' },
+      { key: 'documentConverter', icon: '🧾', title: '문서 → 일반전표 변환기', desc: '기타영수증(원리금상환내역서, 통신비내역) 등 일반전표 변환' },
     ],
   },
   {
