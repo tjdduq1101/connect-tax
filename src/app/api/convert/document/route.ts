@@ -21,10 +21,18 @@ export interface JournalEntry {
   credit: string;
 }
 
-const COST_TYPE_MAP: Record<string, { range: string; label: string; commsCode: string }> = {
-  '제조': { range: '500~599', label: '제조원가', commsCode: '514' },
-  '도급': { range: '600~699', label: '도급공사', commsCode: '614' },
-  '판관비': { range: '800~899', label: '판매관리비', commsCode: '814' },
+const COST_TYPE_MAP: Record<string, {
+  range: string;
+  label: string;
+  commsCode: string;
+  rentCode: string;
+  welfareCode: string;
+  taxDuesCode: string;
+  insuranceCode: string;
+}> = {
+  '제조': { range: '500~599', label: '제조원가',   commsCode: '514', rentCode: '519', welfareCode: '511', taxDuesCode: '517', insuranceCode: '521' },
+  '도급': { range: '600~699', label: '도급공사',   commsCode: '614', rentCode: '619', welfareCode: '611', taxDuesCode: '617', insuranceCode: '621' },
+  '판관비': { range: '800~899', label: '판매관리비', commsCode: '814', rentCode: '819', welfareCode: '811', taxDuesCode: '817', insuranceCode: '821' },
 };
 
 function buildPrompt(costType: string): string {
@@ -40,6 +48,18 @@ function buildPrompt(costType: string): string {
 
 【통신비납부내역서인 경우】
 - 구분=출금, 계정과목코드=${ct.commsCode}, 계정과목명=통신비, 차변=납부금액, 대변=빈칸
+
+【월세납입증명서·월세영수증·임대료 납부내역인 경우】
+- 구분=출금, 계정과목코드=${ct.rentCode}, 계정과목명=지급임차료, 차변=월세금액, 대변=빈칸
+- 월별로 행을 분리(예: 1월·2월·3월 각각 별도 행)
+
+【4대보험(건강보험·국민연금·고용보험·산재보험) 납부내역인 경우】
+- 보험 종류별로 행을 분리하여 각각 별도 행으로 작성
+- 건강보험료(장기요양보험료 포함): 구분=출금, 계정과목코드=${ct.welfareCode}, 계정과목명=복리후생비, 차변=금액, 대변=빈칸
+- 국민연금: 구분=출금, 계정과목코드=${ct.taxDuesCode}, 계정과목명=세금과공과금, 차변=금액, 대변=빈칸
+- 고용보험료: 구분=출금, 계정과목코드=${ct.insuranceCode}, 계정과목명=보험료, 차변=금액, 대변=빈칸
+- 산재보험료: 구분=출금, 계정과목코드=${ct.insuranceCode}, 계정과목명=보험료, 차변=금액, 대변=빈칸
+- 월별로도 행을 분리(예: 3월 건강보험·3월 국민연금·4월 건강보험… 각각 별도 행)
 
 【기타 경비(영수증, 세금계산서 등)인 경우】
 - 구분=출금, 계정과목코드·계정과목명은 ${ct.label}(${ct.range}) 범위에서 내용에 맞게 선택, 차변=금액, 대변=빈칸
