@@ -5,6 +5,7 @@ import { writeFile, unlink } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
+import * as XLSX from 'xlsx';
 
 export const maxDuration = 60;
 
@@ -121,7 +122,9 @@ export async function POST(request: NextRequest) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const mimeType = file.type || 'application/octet-stream';
-    const isPdf = mimeType === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const lowerName = file.name.toLowerCase();
+    const isPdf = mimeType === 'application/pdf' || lowerName.endsWith('.pdf');
+    const isSpreadsheet = lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls') || lowerName.endsWith('.csv');
     debugInfo = { fileName: file.name, fileType: mimeType, fileSize: buffer.length };
 
     const PROMPT = buildPrompt(costType);
@@ -129,7 +132,19 @@ export async function POST(request: NextRequest) {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     let text: string;
 
-    if (isPdf) {
+    if (isSpreadsheet) {
+      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      const sheetTexts = workbook.SheetNames.map(name => {
+        const sheet = workbook.Sheets[name];
+        const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
+        return `### 시트: ${name}\n${csv}`;
+      });
+      const tableText = sheetTexts.join('\n\n');
+      const result = await model.generateContent([
+        `${PROMPT}\n\n아래는 업로드된 스프레드시트의 내용입니다 (CSV 형식). 이를 분석하여 위 규칙에 따라 일반전표로 변환하세요.\n\n${tableText}`,
+      ]);
+      text = result.response.text();
+    } else if (isPdf) {
       const fileManager = new GoogleAIFileManager(apiKey);
       const tempPath = join(tmpdir(), `${randomUUID()}.pdf`);
       await writeFile(tempPath, buffer);

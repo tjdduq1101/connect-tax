@@ -6,7 +6,7 @@ import AccountAutocomplete from './AccountAutocomplete';
 
 const JOURNAL_HEADERS = ['월', '일', '구분', '계정과목코드', '계정과목명', '거래처코드', '거래처명', '적요명', '차변', '대변'];
 const ENTRY_FIELDS: (keyof JournalEntry)[] = ['month', 'day', 'type', 'accountCode', 'accountName', 'partnerCode', 'partnerName', 'memo', 'debit', 'credit'];
-const ACCEPTED_EXT = /\.(jpg|jpeg|png|webp|gif|pdf)$/i;
+const ACCEPTED_EXT = /\.(jpg|jpeg|png|webp|gif|pdf|xlsx|xls|csv)$/i;
 
 function BackButton({ onClick }: { onClick: () => void }) {
   return (
@@ -101,7 +101,7 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
     const valid = files.filter(f => ACCEPTED_EXT.test(f.name));
     const invalidCount = files.length - valid.length;
     if (valid.length === 0) {
-      setError('JPG, PNG, WEBP, GIF, PDF 파일만 지원합니다.');
+      setError('JPG, PNG, WEBP, GIF, PDF, XLSX, XLS, CSV 파일만 지원합니다.');
       return;
     }
     if (invalidCount > 0) {
@@ -201,7 +201,7 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
               ref={fileRef}
               type="file"
               multiple
-              accept=".jpg,.jpeg,.png,.webp,.gif,.pdf"
+              accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.xlsx,.xls,.csv"
               className="hidden"
               onChange={(e) => {
                 const files = e.target.files ? Array.from(e.target.files) : [];
@@ -211,7 +211,7 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
             />
             <div className="text-3xl mb-2">📄</div>
             <p className="font-bold text-slate-600">파일을 드래그하거나 클릭해서 업로드 (여러 개 가능)</p>
-            <p className="text-xs text-slate-400 font-bold mt-1">PDF · JPG · PNG · WEBP 지원 — 문서 유형은 AI가 자동 판단</p>
+            <p className="text-xs text-slate-400 font-bold mt-1">PDF · JPG · PNG · WEBP · XLSX · CSV 지원 — 문서 유형은 AI가 자동 판단</p>
             {fileNames.length > 0 && (
               <p className="mt-3 text-sm font-bold text-violet-600">
                 {fileNames.length === 1 ? fileNames[0] : `${fileNames.length}개 파일 선택됨`}
