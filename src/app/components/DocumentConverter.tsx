@@ -38,11 +38,57 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [costType, setCostType] = useState<CostType>('판관비');
 
+  // 체크박스 / 일괄 변경
+  const [checkedIndices, setCheckedIndices] = useState<Set<number>>(new Set());
+  const [lastCheckedIdx, setLastCheckedIdx] = useState<number | null>(null);
+  const [bulkAccountCode, setBulkAccountCode] = useState('');
+  const [bulkType, setBulkType] = useState('');
+  const [bulkMemo, setBulkMemo] = useState('');
+
+  const handleCheckbox = (idx: number, e: React.MouseEvent) => {
+    if (e.shiftKey && lastCheckedIdx !== null) {
+      const start = Math.min(lastCheckedIdx, idx);
+      const end = Math.max(lastCheckedIdx, idx);
+      setCheckedIndices(prev => {
+        const next = new Set(prev);
+        for (let i = start; i <= end; i++) next.add(i);
+        return next;
+      });
+    } else {
+      setCheckedIndices(prev => {
+        const next = new Set(prev);
+        if (next.has(idx)) next.delete(idx); else next.add(idx);
+        return next;
+      });
+    }
+    setLastCheckedIdx(idx);
+  };
+
+  const toggleSelectAll = () => {
+    if (checkedIndices.size === entries.length) setCheckedIndices(new Set());
+    else setCheckedIndices(new Set(entries.map((_, i) => i)));
+  };
+
+  const applyBulkAccount = (code: string, name: string) => {
+    setEntries(prev => prev.map((r, i) => checkedIndices.has(i) ? { ...r, accountCode: code, accountName: name } : r));
+    setBulkAccountCode('');
+  };
+
+  const applyBulkType = (type: string) => {
+    setEntries(prev => prev.map((r, i) => checkedIndices.has(i) ? { ...r, type } : r));
+  };
+
+  const applyBulkMemo = (memo: string) => {
+    setEntries(prev => prev.map((r, i) => checkedIndices.has(i) ? { ...r, memo } : r));
+  };
+
   const handleCostTypeChange = (type: CostType) => {
     setCostType(type);
     setEntries([]);
     setFileNames([]);
     setError('');
+    setCheckedIndices(new Set());
+    setLastCheckedIdx(null);
   };
 
   const processOneFile = async (file: File): Promise<JournalEntry[]> => {
@@ -68,6 +114,8 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
   const processFiles = async (files: File[]) => {
     setError('');
     setEntries([]);
+    setCheckedIndices(new Set());
+    setLastCheckedIdx(null);
     setFileNames(files.map(f => f.name));
     setLoading(true);
 
@@ -147,6 +195,15 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
 
   const removeRow = (idx: number) => {
     setEntries(prev => prev.filter((_, i) => i !== idx));
+    setCheckedIndices(prev => {
+      const next = new Set<number>();
+      prev.forEach(v => {
+        if (v < idx) next.add(v);
+        else if (v > idx) next.add(v - 1);
+      });
+      return next;
+    });
+    setLastCheckedIdx(null);
   };
 
   const download = () => {
@@ -263,6 +320,14 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
                 <table className="w-full text-sm text-left">
                   <thead className="bg-slate-50 text-slate-400 font-bold text-[11px] uppercase">
                     <tr>
+                      <th className="px-2 py-3 text-center" style={{ width: 36 }}>
+                        <input
+                          type="checkbox"
+                          checked={entries.length > 0 && checkedIndices.size === entries.length}
+                          onChange={toggleSelectAll}
+                          className="w-3.5 h-3.5 rounded accent-violet-600 cursor-pointer"
+                        />
+                      </th>
                       {JOURNAL_HEADERS.map(h => (
                         <th key={h} className="px-3 py-3 whitespace-nowrap">{h}</th>
                       ))}
@@ -270,8 +335,18 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
                     </tr>
                   </thead>
                   <tbody className="font-bold text-slate-700">
-                    {entries.map((row, i) => (
-                      <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
+                    {entries.map((row, i) => {
+                      const isChecked = checkedIndices.has(i);
+                      return (
+                      <tr key={i} className={`border-t border-slate-100 transition-colors ${isChecked ? 'bg-violet-50' : 'hover:bg-slate-50'}`}>
+                        <td className="px-2 py-1 text-center align-middle" onClick={(e) => { e.stopPropagation(); handleCheckbox(i, e); }}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}}
+                            className="w-3.5 h-3.5 rounded accent-violet-600 cursor-pointer"
+                          />
+                        </td>
                         {ENTRY_FIELDS.map(field => (
                           <td key={field} className="px-2 py-1">
                             {field === 'type' ? (
@@ -333,10 +408,61 @@ export default function DocumentConverter({ onBack }: { onBack: () => void }) {
                           </button>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
+
+              {/* 일괄 변경 바 */}
+              {checkedIndices.size > 0 && (
+                <div className="bg-violet-600 rounded-2xl p-4 flex flex-wrap items-center gap-3 shadow-lg sticky bottom-4 z-10">
+                  <span className="text-white font-black text-sm whitespace-nowrap">{checkedIndices.size}개 선택됨</span>
+                  <div className="flex-1 flex flex-wrap gap-2 items-center">
+                    <div className="flex-1 min-w-[200px]">
+                      <AccountAutocomplete
+                        value={bulkAccountCode}
+                        onChange={setBulkAccountCode}
+                        onSelect={(code, name) => applyBulkAccount(code, name)}
+                        placeholder="계정과목 일괄변경 (코드 또는 이름)"
+                        className="w-full px-3 py-2 rounded-xl text-xs font-bold outline-none bg-white text-slate-700"
+                        dropdownPosition="above"
+                      />
+                    </div>
+                    <select
+                      value={bulkType}
+                      onChange={(e) => { setBulkType(e.target.value); if (e.target.value) applyBulkType(e.target.value); }}
+                      className="px-3 py-2 rounded-xl text-xs font-bold outline-none bg-white text-slate-700"
+                    >
+                      <option value="">구분 일괄변경</option>
+                      <option value="출금">출금</option>
+                      <option value="입금">입금</option>
+                      <option value="차변">차변</option>
+                      <option value="대변">대변</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={bulkMemo}
+                      onChange={(e) => setBulkMemo(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') applyBulkMemo(bulkMemo); }}
+                      placeholder="적요 일괄변경 (Enter 적용)"
+                      className="px-3 py-2 rounded-xl text-xs font-bold outline-none bg-white text-slate-700 min-w-[160px]"
+                    />
+                    <button
+                      onClick={() => applyBulkMemo(bulkMemo)}
+                      className="px-3 py-2 bg-white text-violet-600 rounded-xl text-xs font-black hover:bg-violet-50 transition-colors"
+                    >
+                      적요 적용
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => { setCheckedIndices(new Set()); setBulkAccountCode(''); setBulkType(''); setBulkMemo(''); }}
+                    className="text-violet-200 hover:text-white text-xs font-bold transition-colors whitespace-nowrap"
+                  >
+                    선택 해제
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
